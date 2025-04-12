@@ -25,10 +25,19 @@ logger = logging.getLogger(__name__)
 # --- Flask --- 
 flask_app = Flask(__name__)
 
-@flask_app.route('/')
+app = Flask(__name__)
+
+@app.route('/')
 def home():
-    # Serve the index.html map from the 'templates' folder
-    return render_template('index.html')
+    return "Welcome to the homepage!"
+
+@app.route('/index')
+def show_map():
+    return render_template('index.html')  # Make sure map.html exists
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
 
 # Flask route for receiving transportation data from map
 @flask_app.route('/send-locations-to-user', methods=['POST'])
