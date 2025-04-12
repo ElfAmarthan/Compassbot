@@ -37,7 +37,7 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
 
-@app.route('/')
+@app.route('/index')
 def show_map():
     return render_template('index.html')  # Make sure map.html exists
 
@@ -165,7 +165,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Next step: location
     global DEFAULT_CHAT_ID
     DEFAULT_CHAT_ID = update.effective_chat.id
-    map_url = "https://compass-georgia.onrender.com/"  # Updated the map URL to the root
+    map_url = "https://compass-georgia.onrender.com/index"  # Updated the map URL to the root
     keyboard = [[InlineKeyboardButton("🗺️ Open Map", url=map_url)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
