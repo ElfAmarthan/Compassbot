@@ -23,10 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Flask --- 
-flask_app = Flask(__name__)
-
-app = Flask(__name__, static_folder='static')
-app = Flask(__name__, template_folder='templates')
+app = Flask(__name__, static_folder='static', template_folder='templates')
 
 @app.route('/')
 def home():
@@ -37,7 +34,7 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
 
-@app.route('/')
+@app.route('/index')
 def show_map():
     return render_template('index.html')  # Make sure map.html exists
 
@@ -46,7 +43,7 @@ if __name__ == '__main__':
 
 
 # Flask route for receiving transportation data from map
-@flask_app.route('/send-locations-to-user', methods=['POST'])
+@app.route('/send-locations-to-user', methods=['POST'])
 def receive_location():
     global stored_data
     data = request.json
@@ -165,7 +162,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Next step: location
     global DEFAULT_CHAT_ID
     DEFAULT_CHAT_ID = update.effective_chat.id
-    map_url = "https://compass-georgia.onrender.com/index.html"  # Updated the map URL to the root
+    map_url = "https://compass-georgia.onrender.com/index"  # Updated the map URL to the root
     keyboard = [[InlineKeyboardButton("🗺️ Open Map", url=map_url)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -178,7 +175,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Flask Thread --- 
 def run_flask():
-    flask_app.run(host='0.0.0.0', port=5000)  # Run Flask on port 5000
+    app.run(host='0.0.0.0', port=5000)  # Run Flask on port 5000
 
 # --- Main Telegram Bot --- 
 async def telegram_bot():
