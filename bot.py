@@ -432,8 +432,6 @@ def run_flask():
 # --- Telegram Bot ---
 async def telegram_bot():
     try:
-        application = Application.builder().token(BOT_TOKEN).build()
-
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start), CallbackQueryHandler(book, pattern='^start_booking$')],
             states={  # Keep all other states as in original code
