@@ -450,8 +450,7 @@ async def telegram_bot():
         # Add conversation handler to application
         application.add_handler(conv_handler)
 
-        # Start the application
-        await application.start_polling()  # This is important if you're polling for updates instead of using a webhook.
+
     except Exception as e:
         logger.error(f"Error in Telegram bot: {e}")
         raise e
