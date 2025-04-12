@@ -25,13 +25,13 @@ logger = logging.getLogger(__name__)
 # --- Flask --- 
 flask_app = Flask(__name__)
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 
 @app.route('/')
 def home():
     return "Welcome to the homepage!"
 
-@app.route('/index')
+@app.route('/')
 def show_map():
     return render_template('index.html')  # Make sure map.html exists
 

@@ -93,7 +93,7 @@ app.post("/notify-bot", (req, res) => {
   }
 });
 
-const LOCAL_IP = "192.168.0.107"; // Replace with your actual IP
+const LOCAL_IP = process.env.LOCAL_IP || "192.168.100.187";
 const PORT = process.env.PORT || 5500;
 app.listen(PORT, LOCAL_IP, () => {
   console.log(`Server is running on http://${LOCAL_IP}:${PORT}`);
