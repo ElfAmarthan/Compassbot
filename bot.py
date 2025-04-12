@@ -188,24 +188,12 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Thanks! Now please select your pickup and destination on the map:",
         reply_markup=reply_markup
     )
-# Handle confirmation of the destination selection
-async def confirm_destination(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()  # Acknowledge the button press
 
     # Proceed to the next step (date selection)
-    await query.edit_message_text(f"Great! Now, please choose your pickup date.")
+    await update.message.reply_text(f"Great! Now, please choose your pickup date.")
     await show_calendar(update, context)
     return DATE
 
-# Handle editing of the destination
-async def edit_destination(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()  # Acknowledge the button press
-
-    # Ask the user to enter the destination again
-    await query.edit_message_text("Please type your destination:")
-    return DESTINATION
 
 # Calendar and date selection
 async def show_calendar(update: Update, context: CallbackContext):
