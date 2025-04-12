@@ -15,7 +15,7 @@ from telegram.ext import (
 NAME, EMAIL, LOCATION, DESTINATION, DATE, TIME = range(6)
 
 # Configuration
-BOT_TOKEN = '7857906048:AAF7Mb6uSVHNadayyU0X_8so1fHz3kwUSqM'
+BOT_TOKEN = os.getenv('BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE')  # Load the bot token from an environment variable
 DEFAULT_CHAT_ID = None
 
 # Logging
@@ -165,7 +165,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def run_flask():
     flask_app.run(host='0.0.0.0', port=5000)  # Run Flask on port 5000
 
-# --- Main Telegram Bot ---
+# --- Main Telegram Bot --- 
 async def telegram_bot():
     application = Application.builder().token(BOT_TOKEN).build()
 
@@ -190,7 +190,7 @@ async def telegram_bot():
 # --- Entry Point ---
 if __name__ == '__main__':
     nest_asyncio.apply()
-    
+
     # Start Flask app in a separate thread
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
