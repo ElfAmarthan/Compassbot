@@ -79,7 +79,10 @@ app.post("/notify-bot", (req, res) => {
   if (storedData) {
     // Send the location data to the bot
     axios
-      .post("http://192.168.0.107:5500/send-locations-to-user", storedData)
+      .post(
+        "https://compass-georgia.onrender.com/send-locations-to-user",
+        storedData
+      )
       .then((response) => {
         console.log("Bot notified successfully.");
         res.status(200).json({ message: "Bot notified successfully" });
