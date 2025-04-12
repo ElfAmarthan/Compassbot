@@ -11,38 +11,28 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, CallbackContext
 )
 
-# Conversation states
+# --- Conversation states ---
 NAME, EMAIL, LOCATION, DESTINATION, DATE, TIME = range(6)
 
-# Configuration
-BOT_TOKEN = os.getenv('BOT_TOKEN', '7857906048:AAF7Mb6uSVHNadayyU0X_8so1fHz3kwUSqM')  # Load the bot token from an environment variable
+# --- Configuration ---
+BOT_TOKEN = os.getenv('BOT_TOKEN', '7857906048:AAF7Mb6uSVHNadayyU0X_8so1fHz3kwUSqM')  # Replace in prod
 DEFAULT_CHAT_ID = None
 
-# Logging
+# --- Logging ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- Flask --- 
+# --- Flask App ---
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
 @app.route('/')
 def home():
     return "Welcome to the homepage!"
 
-if __name__ == '__main__':
-    # Use the PORT environment variable or default to 5000
-    port = int(os.environ.get('PORT', 5000))
-    app.run(debug=True, host='0.0.0.0', port=port)
-
 @app.route('/index')
 def show_map():
-    return render_template('index.html')  # Make sure map.html exists
+    return render_template('index.html')  # index.html must be in /templates
 
-if __name__ == '__main__':
-    app.run(debug=True)
-
-
-# Flask route for receiving transportation data from map
 @app.route('/send-locations-to-user', methods=['POST'])
 def receive_location():
     global stored_data
@@ -53,11 +43,8 @@ def receive_location():
         return jsonify({"error": "Missing fields"}), 400
 
     stored_data = data
-
-    # Format the location message
     message = format_location_message(data)
 
-    # Send the location message to the bot (to the user associated with DEFAULT_CHAT_ID)
     if DEFAULT_CHAT_ID:
         try:
             asyncio.run(send_telegram_message(DEFAULT_CHAT_ID, message))
@@ -80,33 +67,24 @@ async def send_telegram_message(chat_id, text):
     bot = Bot(BOT_TOKEN)
     await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
 
-# Handle cancel booking request
+# --- Telegram Handlers ---
 async def cancel_booking(update: Update, context: CallbackContext):
     query = update.callback_query
-    await query.answer()  # Acknowledge the button press
+    await query.answer()
+    context.user_data.clear()
+    await query.edit_message_text("Your booking has been canceled. You can start over anytime 😊")
 
-    # Reset the conversation data
-    context.user_data.clear()  # This clears all data stored in context.user_data
-
-    # Inform the user that their booking has been canceled
-    await query.edit_message_text("Your booking has been canceled. You can start over anytime😊")
-
-    # Send the user back to the starting page
     keyboard = [
-        [InlineKeyboardButton("Start Booking", callback_data='start_booking')], 
-        [InlineKeyboardButton("Last Booking", callback_data='last_booking')]  # Option to check the last booking
+        [InlineKeyboardButton("Start Booking", callback_data='start_booking')],
+        [InlineKeyboardButton("Last Booking", callback_data='last_booking')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    # Send the message with the start options again
     await query.message.reply_text(
         "Welcome to Compass Georgia! To start booking, click below. You can also check your last booking.",
         reply_markup=reply_markup
     )
-    
-    return ConversationHandler.END  # End the current conversation
+    return ConversationHandler.END
 
-# Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Start Booking", callback_data='start_booking')],
@@ -128,12 +106,12 @@ async def collect_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.message.text
     context.user_data['name'] = user_name
 
-    confirmation_keyboard = [
+    keyboard = [
         [InlineKeyboardButton("✅ Confirm", callback_data="confirm_name")],
         [InlineKeyboardButton("✏ Edit", callback_data="edit_name")],
         [InlineKeyboardButton("❌ Cancel Booking", callback_data="cancel_booking")]
     ]
-    reply_markup = InlineKeyboardMarkup(confirmation_keyboard)
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
         f"Your name is: {user_name}. Is this correct?",
@@ -156,13 +134,10 @@ async def edit_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_email = update.message.text
     context.user_data['email'] = user_email
-
-    # You can validate email format here if you want
-
-    # Next step: location
     global DEFAULT_CHAT_ID
     DEFAULT_CHAT_ID = update.effective_chat.id
-    map_url = "https://compass-georgia.onrender.com/index"  # Updated the map URL to the root
+
+    map_url = "https://compass-georgia.onrender.com/index"
     keyboard = [[InlineKeyboardButton("🗺️ Open Map", url=map_url)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -173,11 +148,12 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return ConversationHandler.END
 
-# --- Flask Thread --- 
+# --- Flask Thread ---
 def run_flask():
-    app.run(host='0.0.0.0', port=5000)  # Run Flask on port 5000
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=port)
 
-# --- Main Telegram Bot --- 
+# --- Telegram Bot ---
 async def telegram_bot():
     application = Application.builder().token(BOT_TOKEN).build()
 
@@ -202,10 +178,5 @@ async def telegram_bot():
 # --- Entry Point ---
 if __name__ == '__main__':
     nest_asyncio.apply()
-
-    # Start Flask app in a separate thread
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-
-    # Run Telegram bot
+    threading.Thread(target=run_flask).start()
     asyncio.run(telegram_bot())
