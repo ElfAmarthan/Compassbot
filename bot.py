@@ -432,6 +432,10 @@ def run_flask():
 # --- Telegram Bot ---
 async def telegram_bot():
     try:
+        # Ensure the webhook is set before starting the conversation handler
+        await application.bot.set_webhook("https://compass-georgia.onrender.com/your-webhook-path")
+
+        # Define conversation handler
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start), CallbackQueryHandler(book, pattern='^start_booking$')],
             states={  # Keep all other states as in original code
@@ -442,10 +446,12 @@ async def telegram_bot():
             },
             fallbacks=[CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')]
         )
-# Inside telegram_bot()
-        await application.bot.set_webhook("https://compass-georgia.onrender.com/your-webhook-path")
 
+        # Add conversation handler to application
         application.add_handler(conv_handler)
+
+        # Start the application
+        await application.start_polling()  # This is important if you're polling for updates instead of using a webhook.
     except Exception as e:
         logger.error(f"Error in Telegram bot: {e}")
         raise e
