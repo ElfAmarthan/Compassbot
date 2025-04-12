@@ -44,24 +44,29 @@ def show_map():
 @app.route('/send-locations-to-user', methods=['POST'])
 def receive_location():
     global stored_data
-    data = request.json
-    logger.info("Received data from map: %s", data)
+    try:
+        data = request.json
+        logger.info("Received data from map: %s", data)
 
-    if not all(k in data for k in ("pickup", "destination", "distance", "fare")):
-        return jsonify({"error": "Missing fields"}), 400
+        if not all(k in data for k in ("pickup", "destination", "distance", "fare")):
+            return jsonify({"error": "Missing fields"}), 400
 
-    stored_data = data
-    message = format_location_message(data)
+        stored_data = data
+        message = format_location_message(data)
 
-    if DEFAULT_CHAT_ID:
-        try:
-            asyncio.run(send_telegram_message(DEFAULT_CHAT_ID, message))
-            return jsonify({"message": "Data received and forwarded to bot"})
-        except Exception as e:
-            logger.error(f"Error sending message to Telegram bot: {e}")
-            return jsonify({"error": "Failed to send message to Telegram bot"}), 500
+        if DEFAULT_CHAT_ID:
+            try:
+                asyncio.run(send_telegram_message(DEFAULT_CHAT_ID, message))
+                return jsonify({"message": "Data received and forwarded to bot"})
+            except Exception as e:
+                logger.error(f"Error sending message to Telegram bot: {e}")
+                return jsonify({"error": "Failed to send message to Telegram bot"}), 500
 
-    return jsonify({"error": "No chat ID available to send message"}), 400
+        return jsonify({"error": "No chat ID available to send message"}), 400
+    except Exception as e:
+        logger.error(f"Error processing request: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
 
 def format_location_message(data):
     return (
@@ -73,7 +78,11 @@ def format_location_message(data):
 
 async def send_telegram_message(chat_id, text):
     bot = Bot(BOT_TOKEN)
-    await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
+    try:
+        await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        logger.error(f"Error sending message to Telegram: {e}")
+        raise e
 
 # Function to send the booking details via email
 def send_booking_email(booking_details, recipient_emails):
@@ -366,40 +375,51 @@ def get_last_booking(user_id):
 
 # --- Flask Thread ---
 def run_flask():
-    port = int(os.environ.get('PORT', 5000))
-    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=port)
+    try:
+        port = int(os.environ.get('PORT', 5000))
+        app.run(debug=True, use_reloader=False, host='0.0.0.0', port=port)
+    except Exception as e:
+        logger.error(f"Error running Flask app: {e}")
+        raise e
 
 # --- Telegram Bot ---
 async def telegram_bot():
-    application = Application.builder().token(BOT_TOKEN).build()
+    try:
+        application = Application.builder().token(BOT_TOKEN).build()
 
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start), CallbackQueryHandler(book, pattern='^start_booking$')],
-        states={
-            NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name),
-                CallbackQueryHandler(confirm_name, pattern='^confirm_name$'),
-                CallbackQueryHandler(edit_name, pattern='^edit_name$')
-            ],
-            EMAIL: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email),
-            ],
-             DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
-               CallbackQueryHandler(confirm_date, pattern="^confirm_date$"),
-               CallbackQueryHandler(edit_date, pattern="^edit_date$")],
-             TIME: [CallbackQueryHandler(select_time, pattern='^time_'),
-               CallbackQueryHandler(confirm_time, pattern="^confirm_time$"),
-               CallbackQueryHandler(edit_time, pattern="^edit_time$"),
-               CallbackQueryHandler(finalize_booking, pattern="^finalize_booking$")],
-    },
-        fallbacks=[CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')]
-    )
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('start', start), CallbackQueryHandler(book, pattern='^start_booking$')],
+            states={  # Keep all other states as in original code
+                NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name),
+                    CallbackQueryHandler(confirm_name, pattern='^confirm_name$'),
+                    CallbackQueryHandler(edit_name, pattern='^edit_name$')
+                ],
+                EMAIL: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email),
+                ],
+                DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
+                       CallbackQueryHandler(confirm_date, pattern="^confirm_date$"),
+                       CallbackQueryHandler(edit_date, pattern="^edit_date$")],
+                TIME: [CallbackQueryHandler(select_time, pattern='^time_'),
+                       CallbackQueryHandler(confirm_time, pattern="^confirm_time$"),
+                       CallbackQueryHandler(edit_time, pattern="^edit_time$"),
+                       CallbackQueryHandler(finalize_booking, pattern="^finalize_booking$")],
+            },
+            fallbacks=[CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')]
+        )
 
-    application.add_handler(conv_handler)
-    await application.run_polling()
+        application.add_handler(conv_handler)
+        await application.run_polling()
+    except Exception as e:
+        logger.error(f"Error in Telegram bot: {e}")
+        raise e
 
 # --- Entry Point ---
 if __name__ == '__main__':
-    nest_asyncio.apply()
-    threading.Thread(target=run_flask).start()
-    asyncio.run(telegram_bot())
+    try:
+        nest_asyncio.apply()
+        threading.Thread(target=run_flask).start()
+        asyncio.run(telegram_bot())
+    except Exception as e:
+        logger.error(f"Error in main execution: {e}")
