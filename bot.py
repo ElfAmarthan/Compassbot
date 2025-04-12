@@ -4,10 +4,10 @@ import nest_asyncio
 import threading
 import asyncio
 import datetime
+import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import calendar
-import os
 from flask import Flask, request, jsonify, render_template
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
@@ -20,20 +20,20 @@ from telegram.ext import (
 NAME, EMAIL, LOCATION, DESTINATION, DATE, TIME = range(6)
 
 # --- Configuration ---
-BOT_TOKEN = os.getenv('BOT_TOKEN', '7857906048:AAEDeeaKvLzyl6zNzhNd8Afe9lLrGF9Yw5s')  # Replace in prod
+BOT_TOKEN = os.getenv('BOT_TOKEN')  # Ensure your bot token is in environment variables
 DEFAULT_CHAT_ID = None
-SENDER_EMAIL = 'companytnn90@gmail.com'
-SENDER_PASSWORD = 'ncka udhb qryw jwnm'  # Update this securely
-DEFAULT_RECIPIENT_EMAIL = 'companytnn90@gmail.com'
+SENDER_EMAIL = os.getenv('SENDER_EMAIL')
+SENDER_PASSWORD = os.getenv('SENDER_PASSWORD')
+DEFAULT_RECIPIENT_EMAIL = os.getenv('DEFAULT_RECIPIENT_EMAIL')
 
-# --- Logging ---
+# --- Logging Setup ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Flask App ---
 app = Flask(__name__, static_folder='static', template_folder='templates')
-bot = Bot(token=BOT_TOKEN)
 application = Application.builder().token(BOT_TOKEN).build()
+bot = Bot(token=BOT_TOKEN)
 
 bot.set_webhook(url='https://compass-georgia.onrender.com/your-webhook-path')
 @app.route("/your-webhook-path", methods=["POST"])
@@ -41,6 +41,9 @@ def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
     application.update_queue.put_nowait(update)
     return "ok"
+
+async def set_my_webhook():
+    await application.bot.set_webhook(url='https://compass-georgia.onrender.com/your-webhook-path')
 
 @app.route('/')
 def home():
@@ -65,12 +68,12 @@ def receive_location():
 
         if DEFAULT_CHAT_ID:
             try:
-                # Send location details to the user first
+                # Send location details to the user
                 asyncio.run(send_telegram_message(DEFAULT_CHAT_ID, message))
 
-                # Then, prompt for the pickup date after receiving the map data
+                # Prompt for pickup date after receiving the map data
                 asyncio.run(start_date_selection(DEFAULT_CHAT_ID))
-                
+
                 return jsonify({"message": "Data received and forwarded to bot"}), 200
             except Exception as e:
                 logger.error(f"Error sending message to Telegram bot: {e}")
@@ -84,15 +87,14 @@ def receive_location():
 
 async def start_date_selection(chat_id):
     try:
-        # Send a message to the user prompting them to select a pickup date
+        # Send a message prompting the user to select a pickup date
         bot = Bot(BOT_TOKEN)
         await bot.send_message(chat_id=chat_id, text="Thanks for providing the location! Now, please select your pickup date:")
 
-        # Trigger the calendar selection (display the calendar)
-        await show_calendar(None, None)  # You may pass `None` for update and context since you're handling it in a custom way
+        # Trigger the calendar selection
+        await show_calendar(None, None)
     except Exception as e:
         logger.error(f"Error starting date selection: {e}")
-
 
 def format_location_message(data):
     return (
@@ -110,7 +112,6 @@ async def send_telegram_message(chat_id, text):
         logger.error(f"Error sending message to Telegram: {e}")
         raise e
 
-# Function to send the booking details via email
 def send_booking_email(booking_details, recipient_emails):
     msg = MIMEMultipart()
     msg['From'] = SENDER_EMAIL
@@ -125,16 +126,52 @@ def send_booking_email(booking_details, recipient_emails):
         server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         
-        # Join all recipient emails with commas, so it's a single string
-        msg['To'] = ", ".join(recipient_emails)  # Ensure it's a string, not a tuple
+        # Join all recipient emails with commas
+        msg['To'] = ", ".join(recipient_emails)
         
         # Send the email
         text = msg.as_string()
         server.sendmail(SENDER_EMAIL, recipient_emails, text)
         server.quit()
-        print('Booking email sent successfully to all recipients!')
+        logger.info('Booking email sent successfully to all recipients!')
     except Exception as e:
-        print(f'Error sending email: {e}')
+        logger.error(f'Error sending email: {e}')
+
+# Store user bookings persistently (using SQLite for simplicity)
+import sqlite3
+
+def get_db_connection():
+    conn = sqlite3.connect('bookings.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def create_booking_table():
+    conn = get_db_connection()
+    conn.execute('''CREATE TABLE IF NOT EXISTS bookings (
+                        user_id INTEGER PRIMARY KEY,
+                        name TEXT,
+                        email TEXT,
+                        location TEXT,
+                        destination TEXT,
+                        date TEXT,
+                        time TEXT)''')
+    conn.commit()
+    conn.close()
+
+def store_booking(user_id, booking_details):
+    conn = get_db_connection()
+    conn.execute('''INSERT INTO bookings (user_id, name, email, location, destination, date, time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                    (user_id, booking_details['name'], booking_details['email'], booking_details['location'],
+                     booking_details['destination'], booking_details['date'], booking_details['time']))
+    conn.commit()
+    conn.close()
+
+def get_last_booking(user_id):
+    conn = get_db_connection()
+    booking = conn.execute('''SELECT * FROM bookings WHERE user_id = ? ORDER BY rowid DESC LIMIT 1''', (user_id,)).fetchone()
+    conn.close()
+    return booking if booking else "No bookings found."
 
 # --- Telegram Handlers ---
 async def cancel_booking(update: Update, context: CallbackContext):
@@ -400,21 +437,10 @@ async def telegram_bot():
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start), CallbackQueryHandler(book, pattern='^start_booking$')],
             states={  # Keep all other states as in original code
-                NAME: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name),
-                    CallbackQueryHandler(confirm_name, pattern='^confirm_name$'),
-                    CallbackQueryHandler(edit_name, pattern='^edit_name$')
-                ],
-                EMAIL: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email),
-                ],
-                DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
-                       CallbackQueryHandler(confirm_date, pattern="^confirm_date$"),
-                       CallbackQueryHandler(edit_date, pattern="^edit_date$")],
-                TIME: [CallbackQueryHandler(select_time, pattern='^time_'),
-                       CallbackQueryHandler(confirm_time, pattern="^confirm_time$"),
-                       CallbackQueryHandler(edit_time, pattern="^edit_time$"),
-                       CallbackQueryHandler(finalize_booking, pattern="^finalize_booking$")],
+                NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name)],
+                EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
+                DATE: [CallbackQueryHandler(select_date, pattern='^day_')],
+                TIME: [CallbackQueryHandler(select_time, pattern='^time_')]
             },
             fallbacks=[CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')]
         )
@@ -428,7 +454,15 @@ async def telegram_bot():
 if __name__ == '__main__':
     try:
         nest_asyncio.apply()
+
+        # Initialize DB and create booking table if needed
+        create_booking_table()
+
+        # Start Flask in a separate thread
         threading.Thread(target=run_flask).start()
+
+        # Start Telegram bot
         asyncio.run(telegram_bot())
+
     except Exception as e:
         logger.error(f"Error in main execution: {e}")
