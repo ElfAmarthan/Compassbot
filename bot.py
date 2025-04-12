@@ -147,7 +147,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Next step: location
     global DEFAULT_CHAT_ID
     DEFAULT_CHAT_ID = update.effective_chat.id
-    map_url = "http://192.168.0.107:5500/index.html"
+    map_url = "https://compass-georgia.onrender.com/index.html"
     keyboard = [[InlineKeyboardButton("🗺️ Open Map", url=map_url)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
