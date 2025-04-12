@@ -1,206 +1,69 @@
-import smtplib
+import logging
 import nest_asyncio
+import threading
 import asyncio
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackContext, CallbackQueryHandler
-import calendar
-import datetime
-import re  # For email validation
-import sqlite3
+import os
+from flask import Flask, request, jsonify
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.constants import ParseMode
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, filters, ConversationHandler,
+    CallbackQueryHandler, ContextTypes, CallbackContext
+)
 
 # Conversation states
 NAME, EMAIL, LOCATION, DESTINATION, DATE, TIME = range(6)
 
-# Replace with your credentials
-TELEGRAM_API_TOKEN = '7857906048:AAF7Mb6uSVHNadayyU0X_8so1fHz3kwUSqM'
-SENDER_EMAIL = 'companytnn90@gmail.com'
-SENDER_PASSWORD = 'ncka udhb qryw jwnm'  # Update this securely
-DEFAULT_RECIPIENT_EMAIL = 'companytnn90@gmail.com'
+# Configuration
+BOT_TOKEN = '7857906048:AAF7Mb6uSVHNadayyU0X_8so1fHz3kwUSqM'
+DEFAULT_CHAT_ID = None
 
-# Pickup locations for the user to choose from
-pickup_locations = ["Airport", "Hotel", "City Center", "Train Station", "Bus Station"]
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# SQLite Database setup
-def create_db():
-    conn = sqlite3.connect('booking_data.db')
-    c = conn.cursor()
+# --- Flask --- 
+flask_app = Flask(__name__)
 
-    # Create a table for storing booking data
-    c.execute('''CREATE TABLE IF NOT EXISTS bookings (
-                    user_id INTEGER PRIMARY KEY,
-                    name TEXT,
-                    email TEXT,
-                    location TEXT,
-                    destination TEXT,
-                    date TEXT,
-                    time TEXT)''')
+# Flask route for receiving transportation data from map
+@flask_app.route('/send-locations-to-user', methods=['POST'])
+def receive_location():
+    global stored_data
+    data = request.json
+    logger.info("Received data from map: %s", data)
 
-    conn.commit()
-    conn.close()
+    if not all(k in data for k in ("pickup", "destination", "distance", "fare")):
+        return jsonify({"error": "Missing fields"}), 400
 
-create_db()  # Initialize the database
+    stored_data = data
 
-# Function to send the booking details via email
-def send_booking_email(booking_details, recipient_emails):
-    msg = MIMEMultipart()
-    msg['From'] = SENDER_EMAIL
-    msg['Subject'] = 'New Booking Received'
-    
-    # Create the HTML body for the email
-    html_body = f"""
-    <html>
-    <body style="font-family: Arial, sans-serif; color: #333; background-color: #f4f4f9; padding: 20px;">
-        <h2 style="color: #4CAF50; text-align: center;">New Transportation Booking</h2>
-        <table style="width: 100%; max-width: 600px; margin: 0 auto; border-collapse: collapse; background-color: #ffffff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);">
-            <tr>
-                <td style="padding: 8px; font-size: 16px; border-bottom: 1px solid #ddd;">
-                    <strong>Name:</strong> {booking_details['name']}
-                </td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-size: 16px; border-bottom: 1px solid #ddd;">
-                    <strong>Email:</strong> {booking_details['email']}
-                </td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-size: 16px; border-bottom: 1px solid #ddd;">
-                    <strong>Pickup Location:</strong> {booking_details['location']}
-                </td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-size: 16px; border-bottom: 1px solid #ddd;">
-                    <strong>Destination:</strong> {booking_details['destination']}
-                </td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-size: 16px; border-bottom: 1px solid #ddd;">
-                    <strong>Date:</strong> {booking_details['date']}
-                </td>
-            </tr>
-            <tr>
-                <td style="padding: 8px; font-size: 16px; border-bottom: 1px solid #ddd;">
-                    <strong>Time:</strong> {booking_details['time']}
-                </td>
-            </tr>
-        </table>
+    # Format the location message
+    message = format_location_message(data)
 
-        <hr style="margin: 20px 0; border: 1px solid #e0e0e0;">
+    # Send the location message to the bot (to the user associated with DEFAULT_CHAT_ID)
+    if DEFAULT_CHAT_ID:
+        try:
+            asyncio.run(send_telegram_message(DEFAULT_CHAT_ID, message))
+            return jsonify({"message": "Data received and forwarded to bot"})
+        except Exception as e:
+            logger.error(f"Error sending message to Telegram bot: {e}")
+            return jsonify({"error": "Failed to send message to Telegram bot"}), 500
 
-        <p style="font-size: 12px; text-align: center; color: #888;">
-            This email was automatically generated from the Compass Georgia booking system.
-        </p>
-    </body>
-    </html>
-    """
-    
-    # Attach the HTML body to the message
-    msg.attach(MIMEText(html_body, 'html'))
-    
-    try:
-        # Setup the SMTP server
-        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        
-        # Join all recipient emails with commas, so it's a single string
-        msg['To'] = ", ".join(recipient_emails)  # Ensure it's a string, not a tuple
-        
-        # Send the email
-        text = msg.as_string()
-        server.sendmail(SENDER_EMAIL, recipient_emails, text)
-        server.quit()
-        print('Booking email sent successfully to all recipients!')
-    except Exception as e:
-        print(f'Error sending email: {e}')
-
-# Function to store the user's booking details in the SQLite database
-def store_booking_in_db(user_id, booking_details):
-    conn = sqlite3.connect('booking_data.db')
-    c = conn.cursor()
-
-    # Insert the booking details into the database
-    c.execute('''INSERT OR REPLACE INTO bookings (user_id, name, email, location, destination, date, time)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)''', (
-        user_id,
-        booking_details.get('name'),
-        booking_details.get('email'),
-        booking_details.get('location'),
-        booking_details.get('destination'),
-        booking_details.get('date'),
-        booking_details.get('time')
-    ))
-
-    conn.commit()
-    conn.close()
-
-# Function to retrieve the user's last booking from the SQLite database
-def get_last_booking_from_db(user_id):
-    conn = sqlite3.connect('booking_data.db')
-    c = conn.cursor()
-
-    # Query the database for the last booking by this user_id
-    c.execute('SELECT * FROM bookings WHERE user_id = ? ORDER BY rowid DESC LIMIT 1', (user_id,))
-    booking = c.fetchone()
-
-    conn.close()
-
-    if booking:
-        return {
-            'user_id': booking[0],
-            'name': booking[1],
-            'email': booking[2],
-            'location': booking[3],
-            'destination': booking[4],
-            'date': booking[5],
-            'time': booking[6]
-        }
-    return None  # No booking found for this user
-
-# Show the user's last booking
-async def show_last_booking(update: Update, context: CallbackContext):
-    # Check if the update is a message or callback query
-    if update.message:
-        user_id = update.message.from_user.id
-    elif update.callback_query:
-        user_id = update.callback_query.from_user.id
-    else:
-        # If neither, return
-        return
-
-    last_booking = get_last_booking_from_db(user_id)
-    if last_booking:
-        booking_details = (
-            f"Here are your last booking details:\n\n"
-            f"Name: {last_booking['name']}\n"
-            f"Email: {last_booking['email']}\n"
-            f"Pickup Location: {last_booking['location']}\n"
-            f"Destination: {last_booking['destination']}\n"
-            f"Date: {last_booking['date']}\n"
-            f"Time: {last_booking['time']}\n"
-        )
-        # If it's a message, reply to it
-        if update.message:
-            await update.message.reply_text(booking_details)
-        # If it's a callback query, answer the query
-        elif update.callback_query:
-            await update.callback_query.answer()
-            await update.callback_query.edit_message_text(booking_details)
-    else:
-        # If no booking was found for the user
-        if update.message:
-            await update.message.reply_text("You have no previous bookings.")
-        elif update.callback_query:
-            await update.callback_query.answer()
-            await update.callback_query.edit_message_text("You have no previous bookings.")
+    return jsonify({"error": "No chat ID available to send message"}), 400
 
 
-# Handle the 'Last Booking' button press
-async def handle_last_booking(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()
-    await show_last_booking(update, context)
-# Handle cancel booking request
+def format_location_message(data):
+    return (
+        f"📍 <b>Pickup:</b> {data['pickup']['latitude']}, {data['pickup']['longitude']}\n"
+        f"🏁 <b>Destination:</b> {data['destination']['latitude']}, {data['destination']['longitude']}\n"
+        f"📏 <b>Distance:</b> {data['distance']:.2f} km\n"
+        f"💰 <b>Fare:</b> ${data['fare']:.2f}"
+    )
+
+async def send_telegram_message(chat_id, text):
+    bot = Bot(BOT_TOKEN)
+    await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
+
 # Handle cancel booking request
 async def cancel_booking(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -214,7 +77,7 @@ async def cancel_booking(update: Update, context: CallbackContext):
 
     # Send the user back to the starting page
     keyboard = [
-        [InlineKeyboardButton("Start Booking", callback_data='start_booking')],
+        [InlineKeyboardButton("Start Booking", callback_data='start_booking')], 
         [InlineKeyboardButton("Last Booking", callback_data='last_booking')]  # Option to check the last booking
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -228,377 +91,105 @@ async def cancel_booking(update: Update, context: CallbackContext):
     return ConversationHandler.END  # End the current conversation
 
 
-# Start command to introduce the bot
-async def start(update: Update, context: CallbackContext):
+# Telegram Bot Handlers
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Start Booking", callback_data='start_booking')],
-        [InlineKeyboardButton("Last Booking", callback_data='last_booking')]  # Button for last booking
+        [InlineKeyboardButton("Last Booking", callback_data='last_booking')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "Welcome to Compass Georgia! To continue booking, please click the button below to begin. You can also check your last booking.",
+        "Welcome to Compass Georgia! Click to start booking or see your last booking.",
         reply_markup=reply_markup
     )
 
-# Main booking flow
-async def book(update: Update, context: CallbackContext):
+async def book(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # Acknowledge the button press
-
+    await query.answer()
     await query.edit_message_text("Please provide your name:")
     return NAME
 
-
-# Collect the name from the user
-async def collect_name(update: Update, context: CallbackContext):
+async def collect_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.message.text
-    context.user_data['name'] = user_name  # Save the name to user_data
-    
-    # Ask for confirmation
+    context.user_data['name'] = user_name
+
     confirmation_keyboard = [
         [InlineKeyboardButton("✅ Confirm", callback_data="confirm_name")],
         [InlineKeyboardButton("✏ Edit", callback_data="edit_name")],
         [InlineKeyboardButton("❌ Cancel Booking", callback_data="cancel_booking")]
     ]
     reply_markup = InlineKeyboardMarkup(confirmation_keyboard)
-    
-    await update.message.reply_text(f"Your name is: {user_name}. Is this correct?", reply_markup=reply_markup)
+
+    await update.message.reply_text(
+        f"Your name is: {user_name}. Is this correct?",
+        reply_markup=reply_markup
+    )
     return NAME
 
-
-# Handle confirmation of the name selection
-async def confirm_name(update: Update, context: CallbackContext):
+async def confirm_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # Acknowledge the button press
-
-    # Proceed to the next step (email collection)
+    await query.answer()
     await query.edit_message_text("Great! Now, please provide your email address:")
     return EMAIL
 
-
-# Handle editing of the name
-async def edit_name(update: Update, context: CallbackContext):
+async def edit_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # Acknowledge the button press
-
-    # Ask the user to enter the name again
+    await query.answer()
     await query.edit_message_text("Please provide your name:")
     return NAME
 
+async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_email = update.message.text
+    context.user_data['email'] = user_email
 
-# Validate email format
-def is_valid_email(email):
-    email_regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
-    return re.match(email_regex, email)
+    # You can validate email format here if you want
 
-
-# Collect the email address
-async def collect_email(update: Update, context: CallbackContext):
-    email = update.message.text
-    if not is_valid_email(email):
-        await update.message.reply_text("Invalid email address. Please provide a valid email address:")
-        return EMAIL
-    context.user_data['email'] = email  # Save the email to user_data
-    
-    # Ask for confirmation
-    confirmation_keyboard = [
-        [InlineKeyboardButton("✅ Confirm", callback_data="confirm_email")],
-        [InlineKeyboardButton("✏ Edit", callback_data="edit_email")],
-        [InlineKeyboardButton("❌ Cancel Booking", callback_data="cancel_booking")]
-    ]
-    reply_markup = InlineKeyboardMarkup(confirmation_keyboard)
-    
-    await update.message.reply_text(f"Your email is: {email}. Is this correct?", reply_markup=reply_markup)
-    return EMAIL
-
-
-# Handle confirmation of the email selection
-async def confirm_email(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()  # Acknowledge the button press
-
-    # Proceed to the next step (location selection)
-    await query.edit_message_text("Got it! Now, please choose your pickup location:", reply_markup=location_buttons())
-    return LOCATION
-
-
-# Handle editing of the email
-async def edit_email(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()  # Acknowledge the button press
-
-    # Ask the user to enter the email again
-    await query.edit_message_text("Please provide your email address:")
-    return EMAIL
-
-
-# Location buttons function
-def location_buttons():
-    keyboard = [
-        [InlineKeyboardButton("🛫 **Tbilisi Airport**", callback_data="Airport")],
-        [InlineKeyboardButton("🛫 **Kutaisi Airport**", callback_data="Hotel")],
-        [InlineKeyboardButton("🌆 **City Center**", callback_data="City Center")],
-        [InlineKeyboardButton("🚂 **Train Station**", callback_data="Train Station")],
-        [InlineKeyboardButton("🚌 **Bus Station**", callback_data="Bus Station")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-
-# Handle location selection
-async def select_location(update: Update, context: CallbackContext):
-    query = update.callback_query
-    selected_location = query.data
-    context.user_data['location'] = selected_location  # Save the selected location
-    await query.answer()  # Acknowledge the button press
-
-    # Ask for destination
-    await query.edit_message_text(f"Selected Pickup Location: {selected_location}\nNow, please type your destination:")
-    return DESTINATION
-
-
-# Collect the destination from the user
-async def collect_destination(update: Update, context: CallbackContext):
-    user_destination = update.message.text
-    context.user_data['destination'] = user_destination  # Save the destination
-    
-    # Ask for confirmation
-    confirmation_keyboard = [
-        [InlineKeyboardButton("✅ Confirm", callback_data="confirm_destination")],
-        [InlineKeyboardButton("✏ Edit", callback_data="edit_destination")],
-        [InlineKeyboardButton("❌ Cancel Booking", callback_data="cancel_booking")]
-    ]
-    reply_markup = InlineKeyboardMarkup(confirmation_keyboard)
-    
-    await update.message.reply_text(f"Your destination is: {user_destination}. Is this correct?", reply_markup=reply_markup)
-    return DESTINATION
-
-
-# Handle confirmation of the destination selection
-async def confirm_destination(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()  # Acknowledge the button press
-
-    # Proceed to the next step (date selection)
-    await query.edit_message_text(f"Great! Now, please choose your pickup date.")
-    await show_calendar(update, context)
-    return DATE
-
-
-# Handle editing of the destination
-async def edit_destination(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()  # Acknowledge the button press
-
-    # Ask the user to enter the destination again
-    await query.edit_message_text("Please type your destination:")
-    return DESTINATION
-
-
-# Calendar and date selection
-async def show_calendar(update: Update, context: CallbackContext):
-    if update.callback_query:
-        query = update.callback_query
-    else:
-        query = None
-
-    today = datetime.date.today()
-
-    if 'year' not in context.user_data or 'month' not in context.user_data:
-        context.user_data['year'] = today.year
-        context.user_data['month'] = today.month
-
-    month = context.user_data['month']
-    year = context.user_data['year']
-    month_name = calendar.month_name[month]
-    cal = calendar.monthcalendar(year, month)
-
-    keyboard = []
-    for week in cal:
-        row = []
-        for day in week:
-            if day != 0:
-                row.append(InlineKeyboardButton(str(day), callback_data=f"day_{day}"))
-        keyboard.append(row)
-
-    # Navigation buttons for previous and next month
-    navigation = [
-        [InlineKeyboardButton("⬅️ Previous Month", callback_data="prev_month"),
-         InlineKeyboardButton("Next Month ➡️", callback_data="next_month")]
-    ]
-    keyboard.extend(navigation)
-
+    # Next step: location
+    global DEFAULT_CHAT_ID
+    DEFAULT_CHAT_ID = update.effective_chat.id
+    map_url = "http://192.168.0.107:5500/index.html"
+    keyboard = [[InlineKeyboardButton("🗺️ Open Map", url=map_url)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    if query:
-        await query.edit_message_text(f"Please select a date for {month_name} {year}:", reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(f"Please select a date for {month_name} {year}:", reply_markup=reply_markup)
-
-
-# Handle the selection of a month (previous/next)
-async def change_month(update: Update, context: CallbackContext):
-    query = update.callback_query
-    action = query.data
-
-    # Get current month and year from context
-    month = context.user_data['month']
-    year = context.user_data['year']
-
-    # Change the month based on the action (next or previous month)
-    if action == "prev_month":
-        if month == 1:  # January
-            context.user_data['month'] = 12  # Go to December of the previous year
-            context.user_data['year'] = year - 1
-        else:
-            context.user_data['month'] = month - 1
-    elif action == "next_month":
-        if month == 12:  # December
-            context.user_data['month'] = 1  # Go to January of the next year
-            context.user_data['year'] = year + 1
-        else:
-            context.user_data['month'] = month + 1
-
-    # Refresh the calendar with updated month and year
-    await show_calendar(update, context)
-
-
-# Handle the selection of a date
-async def select_date(update: Update, context: CallbackContext):
-    query = update.callback_query
-    selected_day = query.data.split("_")[1]
-    selected_date = f"{context.user_data['year']}-{context.user_data['month']:02d}-{int(selected_day):02d}"
-    context.user_data['date'] = selected_date  # Save the selected date
-    
-    await query.answer()  # Acknowledge the button press
-
-    # Ask for time
-    await query.edit_message_text(f"Selected date: {selected_date}\nNow, please type your preferred time:")
-    return TIME
-
-# Collect the time from the user
-async def collect_time(update: Update, context: CallbackContext):
-    user_time = update.message.text
-    context.user_data['time'] = user_time  # Save the time
-    
-    # Ask for confirmation
-    confirmation_keyboard = [
-        [InlineKeyboardButton("✅ Confirm", callback_data="confirm_time")],
-        [InlineKeyboardButton("✏ Edit", callback_data="edit_time")],
-        [InlineKeyboardButton("❌ Cancel Booking", callback_data="cancel_booking")]
-    ]
-    reply_markup = InlineKeyboardMarkup(confirmation_keyboard)
-    
-    await update.message.reply_text(f"Your time is: {user_time}. Is this correct?", reply_markup=reply_markup)
-    return TIME
-
-
-# Handle confirmation of the time selection
-async def confirm_time(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()  # Acknowledge the button press
-
-    # Finalize the booking
-    await finalize_booking(update, context)
-    return ConversationHandler.END
-
-
-# Handle editing of the time
-async def edit_time(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()  # Acknowledge the button press
-
-    # Ask the user to enter the time again
-    await query.edit_message_text("Please type your preferred time:")
-    return TIME
-
-
-# Finalize the booking and send email
-async def finalize_booking(update: Update, context: CallbackContext):
-    booking_details = {
-        "name": context.user_data.get('name'),
-        "email": context.user_data.get('email'),
-        "location": context.user_data.get('location'),
-        "destination": context.user_data.get('destination'),
-        "date": context.user_data.get('date'),
-        "time": context.user_data.get('time')
-    }
-
-    # Check if update.message exists or fallback to callback_query
-    if update.message:
-        user_id = update.message.from_user.id  # Get the user_id from the message
-    elif update.callback_query:
-        user_id = update.callback_query.from_user.id  # Get the user_id from the callback query
-    else:
-        user_id = None  # Handle the case where both are None (although this should not happen)
-
-    # If user_id is None, it might be an error, so handle this case
-    if user_id is None:
-        print("Error: No user_id found in the update.")
-        return ConversationHandler.END
-
-    # Store the booking data in the SQLite database
-    store_booking_in_db(user_id, booking_details)
-
-    # Send the booking email
-    recipient_email = context.user_data.get('email')  # Use the email entered by the user
-    recipient_emails = [recipient_email, DEFAULT_RECIPIENT_EMAIL]  # List of recipient emails
-    send_booking_email((booking_details), recipient_emails)
-
-    # Check if `update.message` exists, and use `effective_message`
-    message = update.effective_message if update.effective_message else None
-
-    if message:
-        await message.reply_text("Your booking has been confirmed. We have sent the details to your email and our team. Thank you!")
-
-    # End the conversation
-    return ConversationHandler.END
-
-# Main function to run the bot
-async def main():
-    application = Application.builder().token(TELEGRAM_API_TOKEN).build()
-
-    # Conversation handler to handle user flow
-    conversation_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start), CallbackQueryHandler(book, pattern='^start_booking$')],
-        states={
-            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name)],
-            EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
-            LOCATION: [CallbackQueryHandler(select_location)],
-            DESTINATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_destination)],
-            DATE: [CallbackQueryHandler(select_date)],
-            TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time)],
-        },
-        fallbacks=[
-            CallbackQueryHandler(confirm_name, pattern='^confirm_name$'),
-            CallbackQueryHandler(edit_name, pattern='^edit_name$'),
-            CallbackQueryHandler(confirm_email, pattern='^confirm_email$'),
-            CallbackQueryHandler(edit_email, pattern='^edit_email$'),
-            CallbackQueryHandler(confirm_destination, pattern='^confirm_destination$'),
-            CallbackQueryHandler(edit_destination, pattern='^edit_destination$'),
-            CallbackQueryHandler(confirm_time, pattern='^confirm_time$'),
-            CallbackQueryHandler(edit_time, pattern='^edit_time$'),
-            CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')
-
-        ]
+    await update.message.reply_text(
+        "Thanks! Now please select your pickup and destination on the map:",
+        reply_markup=reply_markup
     )
 
-    application.add_handler(CallbackQueryHandler(change_month, pattern='^(prev_month|next_month)$'))
-    application.add_handler(CallbackQueryHandler(show_last_booking, pattern='^last_booking$'))
-    application.add_handler(CommandHandler('last_booking', show_last_booking))
-    application.add_handler(conversation_handler)
+    return ConversationHandler.END
 
-    # Start the bot
+
+# --- Flask Thread ---
+def run_flask():
+    flask_app.run(host='0.0.0.0', port=5000)  # Run Flask on port 5000
+
+# --- Main Telegram Bot ---
+async def telegram_bot():
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start), CallbackQueryHandler(book, pattern='^start_booking$')],
+        states={
+            NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name),
+                CallbackQueryHandler(confirm_name, pattern='^confirm_name$'),
+                CallbackQueryHandler(edit_name, pattern='^edit_name$')
+            ],
+            EMAIL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email),
+            ],
+        },
+        fallbacks=[CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')]
+    )
+
+    application.add_handler(conv_handler)
     await application.run_polling()
 
+# --- Entry Point ---
 if __name__ == '__main__':
-    # Check if the event loop is already running
-    try:
-        # If we are already in a running event loop (common in Jupyter or some IDEs), use await directly
+    nest_asyncio.apply()
+    
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
 
-        nest_asyncio.apply()  # This allows nested event loops (e.g., in Jupyter)
-        asyncio.get_event_loop().run_until_complete(main())  # Run the main function directly
-    except RuntimeError as e:
-        if "This event loop is already running" in str(e):
-            print("Event loop is already running. Skipping asyncio.run()")
-        else:
-            raise e
+    asyncio.run(telegram_bot())

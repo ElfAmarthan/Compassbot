@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Choose Pickup & Destination</title>
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <!-- Geocoder & Routing Machine -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"
+    />
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css"
+    />
+    <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      #map {
+        flex: 1;
+        width: 100%;
+      }
+
+      #info {
+        padding: 1rem;
+        background-color: #f8f9fa;
+        font-size: 1rem;
+        text-align: center;
+      }
+
+      .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+        padding: 1rem;
+        background-color: #ffffff;
+        box-shadow: 0 -1px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      button {
+        flex: 1 1 auto;
+        min-width: 120px;
+        padding: 0.75rem 1rem;
+        font-size: 1rem;
+        border: none;
+        background-color: #007bff;
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+      }
+
+      button:hover {
+        background-color: #0056b3;
+      }
+
+      @media (max-width: 600px) {
+        #info {
+          font-size: 0.9rem;
+        }
+
+        button {
+          font-size: 0.9rem;
+          padding: 0.6rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="info">
+      🟢 Tap the map to select your <strong>Pickup</strong> location.
+    </div>
+
+    <div class="buttons">
+      <button onclick="resetPickup()">Reset Pickup</button>
+      <button onclick="resetDestination()">Reset Destination</button>
+      <button onclick="sendLocations()">Send Locations</button>
+    </div>
+
+    <script>
+      let map = L.map("map").setView([51.505, -0.09], 13);
+      let pickupMarker = null;
+      let destinationMarker = null;
+      let pickup = null;
+      let destination = null;
+      let selecting = "pickup";
+      let routeControl = null;
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+      }).addTo(map);
+
+      L.Control.geocoder({
+        defaultMarkGeocode: true,
+      }).addTo(map);
+
+      map.on("click", function (e) {
+        if (selecting === "pickup") {
+          setPickup(e.latlng);
+          if (!destination) {
+            selecting = "destination";
+            document.getElementById("info").innerHTML =
+              "🔴 Now tap to select your <strong>Destination</strong>.";
+          } else {
+            selecting = null;
+            finishSelection();
+          }
+        } else if (selecting === "destination") {
+          setDestination(e.latlng);
+          selecting = null;
+          finishSelection();
+        }
+      });
+
+      function finishSelection() {
+        document.getElementById("info").innerHTML = `
+          ✅ Done!<br>
+          Pickup: ${pickup.lat.toFixed(5)}, ${pickup.lng.toFixed(5)}<br>
+          Destination: ${destination.lat.toFixed(5)}, ${destination.lng.toFixed(
+          5
+        )}
+        `;
+        showRoute();
+        calculateDistanceAndFare();
+      }
+
+      function setPickup(latlng) {
+        pickup = latlng;
+        if (pickupMarker) {
+          pickupMarker.setLatLng(latlng);
+        } else {
+          pickupMarker = L.marker(latlng, { draggable: true })
+            .addTo(map)
+            .bindPopup("Pickup")
+            .openPopup();
+        }
+      }
+
+      function setDestination(latlng) {
+        destination = latlng;
+        if (destinationMarker) {
+          destinationMarker.setLatLng(latlng);
+        } else {
+          destinationMarker = L.marker(latlng, { draggable: true })
+            .addTo(map)
+            .bindPopup("Destination")
+            .openPopup();
+        }
+      }
+
+      function showRoute() {
+        if (pickup && destination) {
+          if (routeControl) {
+            map.removeControl(routeControl);
+          }
+          routeControl = L.Routing.control({
+            waypoints: [L.latLng(pickup), L.latLng(destination)],
+            createMarker: () => null,
+            routeWhileDragging: true,
+          }).addTo(map);
+        }
+      }
+
+      function calculateDistanceAndFare() {
+        if (pickup && destination) {
+          const distance = map.distance(pickup, destination);
+          const km = distance / 1000;
+          const baseFare = 5;
+          const farePerKm = 1;
+          const fare = baseFare + farePerKm * km;
+
+          document.getElementById("info").innerHTML += `
+            <br><br>
+            📏 Distance: ${km.toFixed(2)} km<br>
+            💰 Estimated Fare: $${fare.toFixed(2)}
+          `;
+        }
+      }
+
+      function resetPickup() {
+        if (pickupMarker) map.removeLayer(pickupMarker);
+        pickup = null;
+        selecting = "pickup";
+        if (routeControl) {
+          map.removeControl(routeControl);
+          routeControl = null;
+        }
+        document.getElementById("info").innerHTML = destination
+          ? "🟢 Pickup reset. Tap to choose a new <strong>Pickup</strong> location."
+          : "🟢 Tap to select your <strong>Pickup</strong> location.";
+      }
+
+      function resetDestination() {
+        if (destinationMarker) map.removeLayer(destinationMarker);
+        destination = null;
+        selecting = pickup ? "destination" : "pickup";
+        if (routeControl) {
+          map.removeControl(routeControl);
+          routeControl = null;
+        }
+        document.getElementById("info").innerHTML = pickup
+          ? "🔴 Tap to select your <strong>Destination</strong>."
+          : "🟢 Tap to select your <strong>Pickup</strong> location.";
+      }
+
+      function sendLocations() {
+        if (pickup && destination) {
+          const data = {
+            pickup: { latitude: pickup.lat, longitude: pickup.lng },
+            destination: {
+              latitude: destination.lat,
+              longitude: destination.lng,
+            },
+            distance: map.distance(pickup, destination) / 1000,
+            fare: 5 + map.distance(pickup, destination) / 1000,
+          };
+
+          fetch("http://192.168.0.107:5500/send-locations-to-user", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          })
+            .then((res) => res.json())
+            .then((res) => {
+              console.log("Server:", res);
+              alert("✅ Locations sent to bot!");
+            })
+            .catch((err) => {
+              console.error(err);
+              alert("❌ Failed to send locations.");
+            });
+        } else {
+          alert("Please choose both pickup and destination.");
+        }
+      }
+    </script>
+  </body>
+</html>
