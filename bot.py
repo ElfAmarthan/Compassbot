@@ -15,7 +15,7 @@ from telegram.ext import (
 NAME, EMAIL, LOCATION, DESTINATION, DATE, TIME = range(6)
 
 # Configuration
-BOT_TOKEN = os.getenv('BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE')  # Load the bot token from an environment variable
+BOT_TOKEN = os.getenv('BOT_TOKEN', '7857906048:AAF7Mb6uSVHNadayyU0X_8so1fHz3kwUSqM')  # Load the bot token from an environment variable
 DEFAULT_CHAT_ID = None
 
 # Logging
