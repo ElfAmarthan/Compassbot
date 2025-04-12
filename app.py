@@ -3,7 +3,7 @@ import nest_asyncio
 import threading
 import asyncio
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -15,7 +15,7 @@ from telegram.ext import (
 NAME, EMAIL, LOCATION, DESTINATION, DATE, TIME = range(6)
 
 # Configuration
-BOT_TOKEN = '7857906048:AAF7Mb6uSVHNadayyU0X_8so1fHz3kwUSqM'
+BOT_TOKEN = os.getenv('BOT_TOKEN', '7857906048:AAF7Mb6uSVHNadayyU0X_8so1fHz3kwUSqM')  # Load the bot token from an environment variable
 DEFAULT_CHAT_ID = None
 
 # Logging
@@ -24,6 +24,21 @@ logger = logging.getLogger(__name__)
 
 # --- Flask --- 
 flask_app = Flask(__name__)
+
+app = Flask(__name__, static_folder='static')
+app = Flask(__name__, template_folder='templates')
+
+@app.route('/')
+def home():
+    return "Welcome to the homepage!"
+
+@app.route('/')
+def show_map():
+    return render_template('index.html')  # Make sure map.html exists
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
 
 # Flask route for receiving transportation data from map
 @flask_app.route('/send-locations-to-user', methods=['POST'])
@@ -50,7 +65,6 @@ def receive_location():
             return jsonify({"error": "Failed to send message to Telegram bot"}), 500
 
     return jsonify({"error": "No chat ID available to send message"}), 400
-
 
 def format_location_message(data):
     return (
@@ -89,7 +103,6 @@ async def cancel_booking(update: Update, context: CallbackContext):
     )
     
     return ConversationHandler.END  # End the current conversation
-
 
 # Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -147,7 +160,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Next step: location
     global DEFAULT_CHAT_ID
     DEFAULT_CHAT_ID = update.effective_chat.id
-    map_url = "https://compass-georgia.onrender.com/index.html"
+    map_url = "https://compass-georgia.onrender.com/"  # Updated the map URL to the root
     keyboard = [[InlineKeyboardButton("🗺️ Open Map", url=map_url)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -158,12 +171,11 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return ConversationHandler.END
 
-
-# --- Flask Thread ---
+# --- Flask Thread --- 
 def run_flask():
     flask_app.run(host='0.0.0.0', port=5000)  # Run Flask on port 5000
 
-# --- Main Telegram Bot ---
+# --- Main Telegram Bot --- 
 async def telegram_bot():
     application = Application.builder().token(BOT_TOKEN).build()
 
@@ -188,8 +200,10 @@ async def telegram_bot():
 # --- Entry Point ---
 if __name__ == '__main__':
     nest_asyncio.apply()
-    
+
+    # Start Flask app in a separate thread
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
 
+    # Run Telegram bot
     asyncio.run(telegram_bot())
