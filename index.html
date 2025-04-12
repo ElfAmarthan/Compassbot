@@ -237,7 +237,7 @@
             distance: map.distance(pickup, destination) / 1000,
             fare: 5 + map.distance(pickup, destination) / 1000,
           };
-
+          // https://compass-georgia.onrender.com/send-locations-to-user
           fetch("https://compass-georgia.onrender.com/send-locations-to-user", {
             method: "POST",
             headers: { "Content-Type": "application/json" },

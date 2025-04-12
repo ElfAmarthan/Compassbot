@@ -3,7 +3,7 @@ import nest_asyncio
 import threading
 import asyncio
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -24,6 +24,12 @@ logger = logging.getLogger(__name__)
 
 # --- Flask --- 
 flask_app = Flask(__name__)
+bot = flask_app  # <- expose it to Flask CLI
+
+
+@flask_app.route('/')
+def home():
+    return render_template('index.html')
 
 # Flask route for receiving transportation data from map
 @flask_app.route('/send-locations-to-user', methods=['POST'])
