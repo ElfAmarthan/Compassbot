@@ -24,11 +24,10 @@ logger = logging.getLogger(__name__)
 
 # --- Flask --- 
 flask_app = Flask(__name__)
-bot = flask_app  # <- expose it to Flask CLI
-
 
 @flask_app.route('/')
 def home():
+    # Serve the index.html map from the 'templates' folder
     return render_template('index.html')
 
 # Flask route for receiving transportation data from map
@@ -56,7 +55,6 @@ def receive_location():
             return jsonify({"error": "Failed to send message to Telegram bot"}), 500
 
     return jsonify({"error": "No chat ID available to send message"}), 400
-
 
 def format_location_message(data):
     return (
@@ -95,7 +93,6 @@ async def cancel_booking(update: Update, context: CallbackContext):
     )
     
     return ConversationHandler.END  # End the current conversation
-
 
 # Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -153,7 +150,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Next step: location
     global DEFAULT_CHAT_ID
     DEFAULT_CHAT_ID = update.effective_chat.id
-    map_url = "https://compass-georgia.onrender.com/index.html"
+    map_url = "https://compass-georgia.onrender.com/"  # Updated the map URL to the root
     keyboard = [[InlineKeyboardButton("🗺️ Open Map", url=map_url)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -164,8 +161,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return ConversationHandler.END
 
-
-# --- Flask Thread ---
+# --- Flask Thread --- 
 def run_flask():
     flask_app.run(host='0.0.0.0', port=5000)  # Run Flask on port 5000
 
@@ -195,7 +191,9 @@ async def telegram_bot():
 if __name__ == '__main__':
     nest_asyncio.apply()
     
+    # Start Flask app in a separate thread
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
 
+    # Run Telegram bot
     asyncio.run(telegram_bot())
