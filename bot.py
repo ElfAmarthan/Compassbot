@@ -32,6 +32,15 @@ logger = logging.getLogger(__name__)
 
 # --- Flask App ---
 app = Flask(__name__, static_folder='static', template_folder='templates')
+bot = Bot(token=BOT_TOKEN)
+application = Application.builder().token(BOT_TOKEN).build()
+
+bot.set_webhook(url='https://compass-georgia.onrender.com/your-webhook-path')
+@app.route("/your-webhook-path", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    application.update_queue.put_nowait(update)
+    return "ok"
 
 @app.route('/')
 def home():
@@ -415,7 +424,6 @@ async def telegram_bot():
         )
 
         application.add_handler(conv_handler)
-        await application.run_polling()
     except Exception as e:
         logger.error(f"Error in Telegram bot: {e}")
         raise e
