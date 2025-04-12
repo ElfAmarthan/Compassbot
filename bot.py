@@ -56,7 +56,12 @@ def receive_location():
 
         if DEFAULT_CHAT_ID:
             try:
+                # Send location details to the user
                 asyncio.run(send_telegram_message(DEFAULT_CHAT_ID, message))
+                
+                # Trigger date selection immediately after sending message
+                asyncio.run(start_date_selection(DEFAULT_CHAT_ID))
+                
                 return jsonify({"message": "Data received and forwarded to bot"})
             except Exception as e:
                 logger.error(f"Error sending message to Telegram bot: {e}")
@@ -67,6 +72,16 @@ def receive_location():
         logger.error(f"Error processing request: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
+async def start_date_selection(chat_id):
+    try:
+        # Send a message to the user prompting them to select a pickup date
+        bot = Bot(BOT_TOKEN)
+        await bot.send_message(chat_id=chat_id, text="Thanks for providing the location! Now, please select your pickup date:")
+
+        # Trigger the calendar selection (display the calendar)
+        await show_calendar(None, None)  # You may pass `None` for update and context since you're handling it in a custom way
+    except Exception as e:
+        logger.error(f"Error starting date selection: {e}")
 
 def format_location_message(data):
     return (
