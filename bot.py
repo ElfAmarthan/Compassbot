@@ -363,7 +363,6 @@ def store_booking(user_id, booking_details):
 # Function to retrieve the user's last booking
 def get_last_booking(user_id):
     return user_bookings.get(user_id, "No bookings found.")
-    return ConversationHandler.END
 
 # --- Flask Thread ---
 def run_flask():
@@ -385,7 +384,14 @@ async def telegram_bot():
             EMAIL: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email),
             ],
-        },
+             DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
+               CallbackQueryHandler(confirm_date, pattern="^confirm_date$"),
+               CallbackQueryHandler(edit_date, pattern="^edit_date$")],
+             TIME: [CallbackQueryHandler(select_time, pattern='^time_'),
+               CallbackQueryHandler(confirm_time, pattern="^confirm_time$"),
+               CallbackQueryHandler(edit_time, pattern="^edit_time$"),
+               CallbackQueryHandler(finalize_booking, pattern="^finalize_booking$")],
+    },
         fallbacks=[CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')]
     )
 
