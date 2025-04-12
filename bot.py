@@ -442,6 +442,8 @@ async def telegram_bot():
             },
             fallbacks=[CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')]
         )
+# Inside telegram_bot()
+        await application.bot.set_webhook("https://compass-georgia.onrender.com/your-webhook-path")
 
         application.add_handler(conv_handler)
     except Exception as e:
