@@ -56,13 +56,13 @@ def receive_location():
 
         if DEFAULT_CHAT_ID:
             try:
-                # Send location details to the user
+                # Send location details to the user first
                 asyncio.run(send_telegram_message(DEFAULT_CHAT_ID, message))
-                
-                # Trigger date selection immediately after sending message
+
+                # Then, prompt for the pickup date after receiving the map data
                 asyncio.run(start_date_selection(DEFAULT_CHAT_ID))
                 
-                return jsonify({"message": "Data received and forwarded to bot"})
+                return jsonify({"message": "Data received and forwarded to bot"}), 200
             except Exception as e:
                 logger.error(f"Error sending message to Telegram bot: {e}")
                 return jsonify({"error": "Failed to send message to Telegram bot"}), 500
@@ -71,6 +71,7 @@ def receive_location():
     except Exception as e:
         logger.error(f"Error processing request: {e}")
         return jsonify({"error": "Internal server error"}), 500
+
 
 async def start_date_selection(chat_id):
     try:
@@ -82,6 +83,7 @@ async def start_date_selection(chat_id):
         await show_calendar(None, None)  # You may pass `None` for update and context since you're handling it in a custom way
     except Exception as e:
         logger.error(f"Error starting date selection: {e}")
+
 
 def format_location_message(data):
     return (
