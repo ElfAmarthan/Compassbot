@@ -214,11 +214,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Thanks! Now please select your pickup and destination on the map:",
         reply_markup=reply_markup
     )
-
-    # Proceed to the next step (date selection)
-    await update.message.reply_text(f"Great! Now, please choose your pickup date.")
-    await show_calendar(update, context)
-    return DATE
+    return LOCATION  # Optional: or just wait for map callback
 
 
 # Calendar and date selection
