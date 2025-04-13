@@ -35,7 +35,6 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 application = Application.builder().token(BOT_TOKEN).build()
 bot = Bot(token=BOT_TOKEN)
 
-bot.set_webhook(url='https://compass-georgia.onrender.com/your-webhook-path')
 @app.route("/your-webhook-path", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
