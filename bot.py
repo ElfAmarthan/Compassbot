@@ -42,9 +42,6 @@ def webhook():
     application.update_queue.put_nowait(update)
     return "ok"
 
-async def set_my_webhook():
-    await application.bot.set_webhook(url='https://compass-georgia.onrender.com/your-webhook-path')
-
 @app.route('/')
 def home():
     return "Welcome to the homepage!"
