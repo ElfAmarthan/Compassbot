@@ -429,13 +429,13 @@ def run_flask():
 # --- Telegram Bot ---
 async def telegram_bot():
     try:
-        # Ensure the webhook is set before starting the conversation handler
+        # Set webhook
         await application.bot.set_webhook("https://compass-georgia.onrender.com/your-webhook-path")
 
         # Define conversation handler
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start), CallbackQueryHandler(book, pattern='^start_booking$')],
-            states={  # Keep all other states as in original code
+            states={
                 NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name)],
                 EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
                 DATE: [CallbackQueryHandler(select_date, pattern='^day_')],
@@ -444,13 +444,18 @@ async def telegram_bot():
             fallbacks=[CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')]
         )
 
-        # Add conversation handler to application
+        # Add handler to the application
         application.add_handler(conv_handler)
 
+        # This is the missing part
+        await application.initialize()
+        await application.start()
+        logger.info("Telegram bot started!")
 
     except Exception as e:
         logger.error(f"Error in Telegram bot: {e}")
         raise e
+
 
 # --- Entry Point ---
 if __name__ == '__main__':
