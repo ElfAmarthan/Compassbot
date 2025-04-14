@@ -221,7 +221,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # After email, move to location step
     await collect_location(update, context)
-    return LOCATION
+    return EMAIL
 
 async def collect_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     map_url = "https://compass-georgia.onrender.com/index"  # Map interface URL
@@ -313,19 +313,24 @@ async def edit_date(update: Update, context: CallbackContext):
 
 # Time selection buttons function
 async def time_buttons(update, context):
-    now = datetime.datetime.now()
-    available_times = [f"{now.hour + i}:00" for i in range(1, 5)]  # Example available times
-
-    keyboard = [[InlineKeyboardButton(time, callback_data=f"time_{time}")] for time in available_times]
+    times = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00']
+    keyboard = [[InlineKeyboardButton(time, callback_data=f'time_{time}') for time in times]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text("Select your pickup time:", reply_markup=reply_markup)
 
+    # Check if the update is a callback query or a message
+    if update.callback_query:
+        await update.callback_query.answer()  # Acknowledge the callback query
+        await update.callback_query.edit_message_text("Please select a time for your pickup:", reply_markup=reply_markup)
+    elif update.message:
+        await update.message.reply_text("Please select a time for your pickup:", reply_markup=reply_markup)
+
+# Handle time selection
 async def select_time(update: Update, context: CallbackContext):
     query = update.callback_query
-    selected_time = query.data.split("_")[1]
-    context.user_data['time'] = selected_time
-      # Confirm the booking
+    selected_time = query.data.split("_")[1]  # Extract the time from the callback data
+    context.user_data['time'] = selected_time  # Save the selected time
+
+    # Confirm the booking
     confirmation_keyboard = [
         [InlineKeyboardButton("✅ Confirm", callback_data="confirm_time")],
         [InlineKeyboardButton("❌ Edit", callback_data="edit_time")]
@@ -340,7 +345,6 @@ async def select_time(update: Update, context: CallbackContext):
 async def confirm_time(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()  # Acknowledge the button press
-
     # Proceed to the next step: finalize the booking
     await query.edit_message_text("You've confirmed your time. We are now finalizing your booking...")
 
@@ -421,8 +425,8 @@ async def telegram_bot():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email),
                 ],
                 DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
-                       CallbackQueryHandler(confirm_date, pattern="^confirm_date$"),
-                       CallbackQueryHandler(edit_date, pattern="^edit_date$")],
+                      CallbackQueryHandler(confirm_date, pattern="^confirm_date$"),
+                    CallbackQueryHandler(edit_date, pattern="^edit_date$")],
                 TIME: [CallbackQueryHandler(select_time, pattern='^time_'),
                        CallbackQueryHandler(confirm_time, pattern="^confirm_time$"),
                        CallbackQueryHandler(edit_time, pattern="^edit_time$"),
