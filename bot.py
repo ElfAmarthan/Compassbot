@@ -428,8 +428,8 @@ def run_flask():
 # --- Telegram Bot ---
 async def telegram_bot():
     try:
-        # Set webhook
-        await application.bot.set_webhook("https://compass-georgia.onrender.com/your-webhook-path")
+        # # Set webhook
+        # await application.bot.set_webhook("https://compass-georgia.onrender.com/your-webhook-path")
 
         # Define conversation handler
         conv_handler = ConversationHandler(
@@ -449,6 +449,7 @@ async def telegram_bot():
         # This is the missing part
         await application.initialize()
         await application.start()
+        await application.bot.set_webhook("https://compass-georgia.onrender.com/your-webhook-path")
         logger.info("Telegram bot started!")
 
     except Exception as e:
