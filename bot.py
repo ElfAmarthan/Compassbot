@@ -20,7 +20,7 @@ from telegram.ext import (
 NAME, EMAIL, LOCATION, DESTINATION, DATE, TIME = range(6)
 
 # --- Configuration ---
-BOT_TOKEN = os.getenv('BOT_TOKEN', '7857906048:AAEDeeaKvLzyl6zNzhNd8Afe9lLrGF9Yw5s')  # Replace in prod
+BOT_TOKEN = os.getenv('BOT_TOKEN', '7857906048:AAEDeeaKvLzyl6zNzhNd8Afe9lLrGF9Yw5s')  # Replace with your actual bot token
 DEFAULT_CHAT_ID = None
 SENDER_EMAIL = 'companytnn90@gmail.com'
 SENDER_PASSWORD = 'ncka udhb qryw jwnm'  # Update this securely
@@ -57,7 +57,7 @@ def receive_location():
         if DEFAULT_CHAT_ID:
             try:
                 asyncio.run(send_telegram_message(DEFAULT_CHAT_ID, message))
-                
+
                 # Now that location is selected, show the calendar
                 asyncio.run(show_calendar(DEFAULT_CHAT_ID))  # Trigger calendar display after receiving the location data
                 return jsonify({"message": "Data received and forwarded to bot"})
@@ -182,7 +182,11 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['email'] = user_email
     global DEFAULT_CHAT_ID
     DEFAULT_CHAT_ID = update.effective_chat.id
-    
+
+    # After email, move to location step
+    await collect_location(update, context)
+    return LOCATION
+
 async def collect_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     map_url = "https://compass-georgia.onrender.com/index"  # Map interface URL
     keyboard = [[InlineKeyboardButton("🗺️ Open Map", url=map_url)]]  # Map button
@@ -192,14 +196,7 @@ async def collect_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     
-    # The calendar will be triggered only after the user selects a location
-    return LOCATION  # Return LOCATION state to wait for the location data.
-
-    # Proceed to the next step (date selection)
-    await update.message.reply_text(f"Great! Now, please choose your pickup date.")
-    await show_calendar(update, context)
-    return DATE
-
+    return LOCATION
 
 # Calendar and date selection
 async def show_calendar(update: Update, context: CallbackContext):
@@ -280,140 +277,32 @@ async def edit_date(update: Update, context: CallbackContext):
 
 # Time selection buttons function
 async def time_buttons(update, context):
-    times = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00']
-    keyboard = [[InlineKeyboardButton(time, callback_data=f'time_{time}') for time in times]]
+    now = datetime.datetime.now()
+    available_times = [f"{now.hour + i}:00" for i in range(1, 5)]  # Example available times
+
+    keyboard = [[InlineKeyboardButton(time, callback_data=f"time_{time}")] for time in available_times]
     reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text("Select your pickup time:", reply_markup=reply_markup)
 
-    # Check if the update is a callback query or a message
-    if update.callback_query:
-        await update.callback_query.answer()  # Acknowledge the callback query
-        await update.callback_query.edit_message_text("Please select a time for your pickup:", reply_markup=reply_markup)
-    elif update.message:
-        await update.message.reply_text("Please select a time for your pickup:", reply_markup=reply_markup)
-
-# Handle time selection
 async def select_time(update: Update, context: CallbackContext):
     query = update.callback_query
-    selected_time = query.data.split("_")[1]  # Extract the time from the callback data
-    context.user_data['time'] = selected_time  # Save the selected time
-
-    # Confirm the booking
-    confirmation_keyboard = [
-        [InlineKeyboardButton("✅ Confirm", callback_data="confirm_time")],
-        [InlineKeyboardButton("❌ Edit", callback_data="edit_time")]
-    ]
-    reply_markup = InlineKeyboardMarkup(confirmation_keyboard)
-
-    await query.answer()  # Acknowledge the button press
-    await query.edit_message_text(f"You've selected the time: {selected_time}\nIs this correct?", reply_markup=reply_markup)
-    return TIME
-
-# Handle confirmation of the time selection
-async def confirm_time(update: Update, context: CallbackContext):
-    query = update.callback_query
+    selected_time = query.data.split("_")[1]
+    context.user_data['time'] = selected_time
     await query.answer()  # Acknowledge the button press
 
-    # Proceed to the next step: finalize the booking
-    await query.edit_message_text("You've confirmed your time. We are now finalizing your booking...")
-
-    # Send the booking email
-    await finalize_booking(update, context)
-
-# Final step: Sending the booking email
-async def finalize_booking(update: Update, context: CallbackContext):
-    booking_details = f"""
-    Name: {context.user_data.get('name')}
-    Email: {context.user_data.get('email')}
-    Pickup Location: {context.user_data.get('location')}
-    Destination: {context.user_data.get('destination')}
-    Pickup Date: {context.user_data.get('date')}
-    Time: {context.user_data.get('time')}
-    """
-
-    # Get the email address provided by the user
-    recipient_email = context.user_data.get('email')  # Use the email entered by the user
-
-    # Send the email to both the user and the default recipient
-    recipient_emails = [recipient_email, DEFAULT_RECIPIENT_EMAIL]  # List of recipient emails
-    send_booking_email(booking_details, recipient_emails)
-
-  # Check if `update.message` exists, and use `effective_message`
-    message = update.effective_message if update.effective_message else None
-
-    if message:
-        await message.reply_text("Your booking has been confirmed. We have sent the details to your email and our team. Thank you!")
+    # Send confirmation
+    confirmation_message = f"Your booking details are:\n\n"
+    confirmation_message += f"Name: {context.user_data['name']}\n"
+    confirmation_message += f"Email: {context.user_data['email']}\n"
+    confirmation_message += f"Pickup: {stored_data['pickup']}\n"
+    confirmation_message += f"Destination: {stored_data['destination']}\n"
+    confirmation_message += f"Date: {context.user_data['date']}\n"
+    confirmation_message += f"Time: {context.user_data['time']}\n"
+    
+    # Send email confirmation
+    send_booking_email(confirmation_message, [DEFAULT_RECIPIENT_EMAIL])
 
     # End the conversation
+    await query.edit_message_text("Your booking is confirmed! Thank you for using Compass Georgia.")
     return ConversationHandler.END
-
-
-
-# Handle editing of the time selection
-async def edit_time(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()  # Acknowledge the button press
-
-    # Ask the user to select the time again
-    await time_buttons(update, context)
-    return TIME
-# Storage for user bookings (In-memory storage)
-user_bookings = {}
-
-# Function to store the user's booking details
-def store_booking(user_id, booking_details):
-    user_bookings[user_id] = booking_details
-
-# Function to retrieve the user's last booking
-def get_last_booking(user_id):
-    return user_bookings.get(user_id, "No bookings found.")
-
-# --- Flask Thread ---
-def run_flask():
-    try:
-        port = int(os.environ.get('PORT', 5000))
-        app.run(debug=True, use_reloader=False, host='0.0.0.0', port=port)
-    except Exception as e:
-        logger.error(f"Error running Flask app: {e}")
-        raise e
-
-# --- Telegram Bot ---
-async def telegram_bot():
-    try:
-        application = Application.builder().token(BOT_TOKEN).build()
-
-        conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('start', start), CallbackQueryHandler(book, pattern='^start_booking$')],
-            states={  # Keep all other states as in original code
-                NAME: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name),
-                    CallbackQueryHandler(confirm_name, pattern='^confirm_name$'),
-                    CallbackQueryHandler(edit_name, pattern='^edit_name$')
-                ],
-                EMAIL: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email),
-                ],
-                DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
-                       CallbackQueryHandler(confirm_date, pattern="^confirm_date$"),
-                       CallbackQueryHandler(edit_date, pattern="^edit_date$")],
-                TIME: [CallbackQueryHandler(select_time, pattern='^time_'),
-                       CallbackQueryHandler(confirm_time, pattern="^confirm_time$"),
-                       CallbackQueryHandler(edit_time, pattern="^edit_time$"),
-                       CallbackQueryHandler(finalize_booking, pattern="^finalize_booking$")],
-            },
-            fallbacks=[CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')]
-        )
-
-        application.add_handler(conv_handler)
-        await application.run_polling()
-    except Exception as e:
-        logger.error(f"Error in Telegram bot: {e}")
-        raise e
-
-# --- Entry Point ---
-if __name__ == '__main__':
-    try:
-        nest_asyncio.apply()
-        threading.Thread(target=run_flask).start()
-        asyncio.run(telegram_bot())
-    except Exception as e:
-        logger.error(f"Error in main execution: {e}")
