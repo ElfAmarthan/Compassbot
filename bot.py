@@ -56,10 +56,13 @@ def receive_location():
 
         if DEFAULT_CHAT_ID:
             try:
-                # Trigger sending the location message and showing the calendar asynchronously
+                # Get the current event loop and run the tasks asynchronously using await
                 loop = asyncio.get_event_loop()
-                loop.create_task(send_telegram_message(DEFAULT_CHAT_ID, message))
-                loop.create_task(show_calendar_for_user(DEFAULT_CHAT_ID))  # Trigger calendar after receiving location data
+
+                # Run the tasks directly and await them within the Flask route
+                loop.run_until_complete(send_telegram_message(DEFAULT_CHAT_ID, message))
+                loop.run_until_complete(show_calendar_for_user(DEFAULT_CHAT_ID))  # Trigger calendar after receiving location data
+                
                 return jsonify({"message": "Data received and forwarded to bot"})
             except Exception as e:
                 logger.error(f"Error sending message to Telegram bot: {e}")
