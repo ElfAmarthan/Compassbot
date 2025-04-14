@@ -464,7 +464,7 @@ async def telegram_bot():
 
 
 if __name__ == '__main__':
-    import nest_asyncio
+    # Apply nest_asyncio to allow nested event loops
     nest_asyncio.apply()
 
     # Initialize DB and create table if needed
@@ -483,5 +483,5 @@ if __name__ == '__main__':
         # Start the Telegram bot
         await telegram_bot()
 
-    asyncio.create_task(main())
+    asyncio.run(main())
 
