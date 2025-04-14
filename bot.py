@@ -82,11 +82,38 @@ def format_location_message(data):
         f"💰 <b>Fare:</b> ${data['fare']:.2f}"
     )
 async def show_calendar_for_user(chat_id):
+    # Check if query exists; if not, send message directly to the user
+    today = datetime.date.today()
+
+    # Set the default year and month for calendar
+    month = today.month
+    year = today.year
+    month_name = calendar.month_name[month]
+    cal = calendar.monthcalendar(year, month)
+
+    keyboard = []
+    for week in cal:
+        row = []
+        for day in week:
+            if day != 0:
+                row.append(InlineKeyboardButton(str(day), callback_data=f"day_{day}"))
+        keyboard.append(row)
+
+    navigation = [
+        [InlineKeyboardButton("⬅️ Previous Month", callback_data="prev_month"),
+         InlineKeyboardButton("Next Month ➡️", callback_data="next_month")]
+    ]
+    keyboard.extend(navigation)
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # Send the calendar to the user directly
     try:
-        # Show the calendar once the location is selected and the chat ID is set
-        await show_calendar(None, ContextTypes.DEFAULT_TYPE)  # Replace with the appropriate context if needed
+        bot = Bot(BOT_TOKEN)
+        await bot.send_message(chat_id=chat_id, text=f"Please select a date for {month_name} {year}:", reply_markup=reply_markup)
     except Exception as e:
-        logger.error(f"Error while showing the calendar: {e}")
+        logger.error(f"Error sending calendar to user: {e}")
+
 
 async def send_telegram_message(chat_id, text):
     bot = Bot(BOT_TOKEN)
