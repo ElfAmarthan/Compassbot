@@ -184,22 +184,29 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return DATE
 
 async def collect_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    time_input = update.message.text.strip()
     try:
-        datetime.datetime.strptime(update.message.text.strip(), "%H:%M")
-        context.user_data['time'] = update.message.text.strip()
+        datetime.datetime.strptime(time_input, "%H:%M")
+        context.user_data['time'] = time_input
     except ValueError:
-        await update.message.reply_text("Invalid format. Use HH:MM (e.g. 14:30).")
-        return TIME
+        await update.message.reply_text("❌ Invalid format. Please use HH:MM (e.g. 14:30).")
+        return TIME  # Stay in TIME state
 
-    booking_summary = f"""
-Name: {context.user_data['name']}
-Email: {context.user_data['email']}
-Date: {context.user_data['date']}
-Time: {context.user_data['time']}
-"""
+    # Format summary
+    booking_summary = (
+        f"✅ <b>Booking Summary:</b>\n\n"
+        f"👤 Name: {context.user_data.get('name')}\n"
+        f"📧 Email: {context.user_data.get('email')}\n"
+        f"📅 Date: {context.user_data.get('date')}\n"
+        f"⏰ Time: {context.user_data.get('time')}\n"
+    )
+
+    # Send email
     send_booking_email(booking_summary, [context.user_data['email'], DEFAULT_RECIPIENT_EMAIL])
-    await update.message.reply_text("✅ Booking confirmed and emailed.")
+
+    await update.message.reply_text("✅ Booking confirmed! A confirmation email has been sent.")
     return ConversationHandler.END
+
 
 # --- Start Flask in separate thread ---
 def run_flask():
