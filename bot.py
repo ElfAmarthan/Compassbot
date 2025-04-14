@@ -221,7 +221,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # After email, move to location step
     await collect_location(update, context)
-    return LOCATION
+    return EMAIL
 
 async def collect_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     map_url = "https://compass-georgia.onrender.com/index"  # Map interface URL
@@ -233,6 +233,34 @@ async def collect_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     return LOCATION
+async def collect_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_name = update.message.text
+    context.user_data['name'] = user_name
+
+    keyboard = [
+        [InlineKeyboardButton("✅ Confirm", callback_data="confirm_name")],
+        [InlineKeyboardButton("✏ Edit", callback_data="edit_name")],
+        [InlineKeyboardButton("❌ Cancel Booking", callback_data="cancel_booking")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        f"Your name is: {user_name}. Is this correct?",
+        reply_markup=reply_markup
+    )
+    return NAME
+
+async def confirm_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Great! Now, please provide your DATE:")
+    return DATE
+
+async def edit_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Please provide your Location:")
+    return EMAIL
 
 # Calendar and date selection
 async def show_calendar(update: Update, context: CallbackContext):
@@ -423,9 +451,6 @@ async def telegram_bot():
                 ],
                 EMAIL: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email),
-                ],
-                LOCATION: [
-
                 ],
                 DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
                       CallbackQueryHandler(confirm_date, pattern="^confirm_date$"),
