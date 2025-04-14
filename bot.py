@@ -186,25 +186,38 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def collect_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     time_input = update.message.text.strip()
     try:
+        # Check if time format is correct (HH:MM)
         datetime.datetime.strptime(time_input, "%H:%M")
         context.user_data['time'] = time_input
+
+        # Log the collected time for debugging purposes
+        logger.info(f"Collected time: {time_input}")
+
+        # Format the booking summary
+        booking_summary = (
+            f"✅ <b>Booking Summary:</b>\n\n"
+            f"👤 Name: {context.user_data.get('name')}\n"
+            f"📧 Email: {context.user_data.get('email')}\n"
+            f"📅 Date: {context.user_data.get('date')}\n"
+            f"⏰ Time: {context.user_data.get('time')}\n"
+        )
+
+        # Send email with booking details
+        send_booking_email(booking_summary, [context.user_data['email'], DEFAULT_RECIPIENT_EMAIL])
+
+        # Send confirmation message to the user
+        await update.message.reply_text("✅ Booking confirmed! A confirmation email has been sent.")
+        
+        # End the conversation
+        return ConversationHandler.END
     except ValueError:
+        # If the time format is invalid, prompt the user again
         await update.message.reply_text("❌ Invalid format. Please use HH:MM (e.g. 14:30).")
-        return TIME  # Stay in TIME state
+        return TIME  # Stay in the TIME state for retry
 
-    # Format summary
-    booking_summary = (
-        f"✅ <b>Booking Summary:</b>\n\n"
-        f"👤 Name: {context.user_data.get('name')}\n"
-        f"📧 Email: {context.user_data.get('email')}\n"
-        f"📅 Date: {context.user_data.get('date')}\n"
-        f"⏰ Time: {context.user_data.get('time')}\n"
-    )
 
-    # Send email
-    send_booking_email(booking_summary, [context.user_data['email'], DEFAULT_RECIPIENT_EMAIL])
-
-    await update.message.reply_text("✅ Booking confirmed! A confirmation email has been sent.")
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Booking process has been cancelled.")
     return ConversationHandler.END
 
 
@@ -226,7 +239,7 @@ async def run_bot():
             DATE: [CallbackQueryHandler(handle_calendar)],
             TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time)],
         },
-        fallbacks=[]
+        fallbacks=[CommandHandler('cancel', cancel)]
     )
 
     app.add_handler(conv_handler)
