@@ -325,22 +325,24 @@ async def telegram_bot():
 
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start), CallbackQueryHandler(book, pattern='^start_booking$')],
-            states = {
-    NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name),
-           CallbackQueryHandler(confirm_name, pattern='^confirm_name$'),
-           ],
-    EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
-    LOCATION: [CallbackQueryHandler(collect_location, pattern='^location_')],
-    DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
-           CallbackQueryHandler(confirm_date, pattern="^confirm_date$")],
-    TIME: [CallbackQueryHandler(select_time, pattern='^time_'),
-           CallbackQueryHandler(confirm_time, pattern="^confirm_time$")],
-},
+            states={  # Define states here...
+                NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name),
+                       CallbackQueryHandler(confirm_name, pattern='^confirm_name$'),
+                      ],
+                EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
+                DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
+                       CallbackQueryHandler(confirm_date, pattern="^confirm_date$"),
+                       ],
+                TIME: [CallbackQueryHandler(select_time, pattern='^time_'),
+                       CallbackQueryHandler(confirm_time, pattern="^confirm_time$"),
+                       CallbackQueryHandler(finalize_booking, pattern="^finalize_booking$")],
+            },
             fallbacks=[CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')]
         )
 
         application.add_handler(conv_handler)
         await application.run_polling()
+
     except Exception as e:
         logger.error(f"Error in Telegram bot: {e}")
         raise e
@@ -348,8 +350,14 @@ async def telegram_bot():
 # --- Entry Point ---
 if __name__ == '__main__':
     try:
+        # Use asyncio to run both Flask and the Telegram bot
         nest_asyncio.apply()
-        threading.Thread(target=run_flask).start()
+
+        # Start Flask in a separate thread so it doesn't block the asyncio event loop
+        threading.Thread(target=lambda: app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)).start()
+
+        # Run the Telegram bot
         asyncio.run(telegram_bot())
+
     except Exception as e:
         logger.error(f"Error in main execution: {e}")
