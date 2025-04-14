@@ -457,19 +457,25 @@ async def telegram_bot():
         raise e
 
 
-# --- Entry Point ---
 if __name__ == '__main__':
-    try:
-        nest_asyncio.apply()
+    import nest_asyncio
+    nest_asyncio.apply()
 
-        # Initialize DB and create booking table if needed
-        create_booking_table()
+    # Initialize DB and create table if needed
+    create_booking_table()
 
-        # Start Flask in a separate thread
-        threading.Thread(target=run_flask).start()
+    async def main():
+        # Start Flask using a background thread compatible with asyncio
+        loop = asyncio.get_event_loop()
 
-        # Start Telegram bot
-        asyncio.run(telegram_bot())
+        def start_flask():
+            app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)), debug=True, use_reloader=False)
 
-    except Exception as e:
-        logger.error(f"Error in main execution: {e}")
+        flask_thread = threading.Thread(target=start_flask)
+        flask_thread.start()
+
+        # Start the Telegram bot
+        await telegram_bot()
+
+    asyncio.run(main())
+
