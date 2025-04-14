@@ -46,15 +46,16 @@ user_contexts = {}
 
 @app.route('/send-locations-to-user', methods=['POST'])
 def receive_location():
-    global user_contexts
     data = request.json
-    chat_id = data.get("chat_id")  # Include this in frontend map POST
-
+    chat_id = data.get("chat_id")
+    
     if not chat_id or chat_id not in user_contexts:
         return jsonify({"error": "Invalid or missing chat ID"}), 400
-
-    if not all(k in data for k in ("pickup", "destination", "distance", "fare")):
-        return jsonify({"error": "Missing fields"}), 400
+    
+    required_fields = ["pickup", "destination", "distance", "fare"]
+    missing_fields = [field for field in required_fields if field not in data]
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
 
     # Store in user's context
     user_contexts[chat_id]['location'] = data['pickup']
@@ -62,11 +63,11 @@ def receive_location():
     user_contexts[chat_id]['distance'] = data['distance']
     user_contexts[chat_id]['fare'] = data['fare']
 
+    # Proceed with sending messages and triggering calendar
     asyncio.run(send_telegram_message(chat_id, format_location_message(data)))
-    asyncio.run(show_calendar(chat_id))  # Custom function to trigger calendar
+    asyncio.run(show_calendar(chat_id))
 
     return jsonify({"message": "Location data received and processed"})
-
 
 def format_location_message(data):
     return (
@@ -324,18 +325,17 @@ async def telegram_bot():
 
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start), CallbackQueryHandler(book, pattern='^start_booking$')],
-            states={
-                NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name),
-                       CallbackQueryHandler(confirm_name, pattern='^confirm_name$'),
-                      ],
-                EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
-                DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
-                       CallbackQueryHandler(confirm_date, pattern="^confirm_date$"),
-                       ],
-                TIME: [CallbackQueryHandler(select_time, pattern='^time_'),
-                       CallbackQueryHandler(confirm_time, pattern="^confirm_time$"),
-                       CallbackQueryHandler(finalize_booking, pattern="^finalize_booking$")],
-            },
+            states = {
+    NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name),
+           CallbackQueryHandler(confirm_name, pattern='^confirm_name$'),
+           ],
+    EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
+    LOCATION: [CallbackQueryHandler(collect_location, pattern='^location_')],
+    DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
+           CallbackQueryHandler(confirm_date, pattern="^confirm_date$")],
+    TIME: [CallbackQueryHandler(select_time, pattern='^time_'),
+           CallbackQueryHandler(confirm_time, pattern="^confirm_time$")],
+},
             fallbacks=[CallbackQueryHandler(cancel_booking, pattern='^cancel_booking$')]
         )
 
