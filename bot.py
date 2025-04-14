@@ -185,6 +185,7 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def collect_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     time_input = update.message.text.strip()
+    logger.info(f"User input time: {time_input}")
     try:
         # Check if time format is correct (HH:MM)
         datetime.datetime.strptime(time_input, "%H:%M")
@@ -208,13 +209,12 @@ async def collect_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Send confirmation message to the user
         await update.message.reply_text("✅ Booking confirmed! A confirmation email has been sent.")
         
-        # End the conversation
+        # End the conversation and return the correct state
         return ConversationHandler.END
     except ValueError:
         # If the time format is invalid, prompt the user again
         await update.message.reply_text("❌ Invalid format. Please use HH:MM (e.g. 14:30).")
         return TIME  # Stay in the TIME state for retry
-
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Booking process has been cancelled.")
