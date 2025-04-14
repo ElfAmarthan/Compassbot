@@ -182,7 +182,8 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(f"📅 Select a date for {month_name} {year}:", reply_markup=reply_markup)
     return DATE
-
+async def dummy_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    return LOCATION  # Just stay in LOCATION until map input triggers next step
 async def collect_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     time_input = update.message.text.strip()
     logger.info(f"User input time: {time_input}")
@@ -235,7 +236,7 @@ async def run_bot():
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name)],
             EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
-            LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: None)],  # Dummy, real one is from Flask
+            LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, dummy_handler)],  # Dummy, real one is from Flask
             DATE: [CallbackQueryHandler(handle_calendar)],
             TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time)],
         },
