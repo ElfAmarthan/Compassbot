@@ -37,10 +37,13 @@ bot = Bot(token=BOT_TOKEN)
 
 @app.route("/your-webhook-path", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    application.update_queue.put_nowait(update)
-    return "ok"
-
+    try:
+        update = Update.de_json(request.get_json(force=True), bot)
+        asyncio.get_event_loop().create_task(application.process_update(update))
+        return "ok"
+    except Exception as e:
+        logger.error(f"Error in webhook: {e}")
+        return "error", 500
 @app.route('/')
 def home():
     return "Welcome to the homepage!"
