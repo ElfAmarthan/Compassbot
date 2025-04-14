@@ -446,9 +446,10 @@ async def telegram_bot():
         # Add handler to the application
         application.add_handler(conv_handler)
 
-        # This is the missing part
+        # This is the missing parts
         await application.initialize()
         await application.start()
+        application.add_handler(CommandHandler("start", start))
         await application.bot.set_webhook("https://compass-georgia.onrender.com/your-webhook-path")
         logger.info("Telegram bot started!")
 
