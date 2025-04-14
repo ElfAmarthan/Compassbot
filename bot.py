@@ -450,11 +450,13 @@ async def telegram_bot():
         application.add_handler(conv_handler)
 
         # This is the missing parts
+        await application.bot.set_webhook("https://compass-georgia.onrender.com/your-webhook-path")
         await application.initialize()
         await application.start()
-        application.add_handler(CommandHandler("start", start))
-        await application.bot.set_webhook("https://compass-georgia.onrender.com/your-webhook-path")
         logger.info("Telegram bot started!")
+    except Exception as e:
+        logger.error(f"Error in Telegram bot: {e}")
+        raise e
 
     except Exception as e:
         logger.error(f"Error in Telegram bot: {e}")
@@ -481,5 +483,5 @@ if __name__ == '__main__':
         # Start the Telegram bot
         await telegram_bot()
 
-    asyncio.run(main())
+    asyncio.create_task(main())
 
