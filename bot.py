@@ -481,5 +481,5 @@ if __name__ == '__main__':
         # Start the Telegram bot
         await telegram_bot()
 
-    asyncio.run(main())
+    asyncio.create_task(main())
 
