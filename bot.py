@@ -20,7 +20,7 @@ from telegram.ext import (
 NAME, EMAIL, LOCATION, DESTINATION, DATE, TIME = range(6)
 
 # --- Configuration ---
-BOT_TOKEN = os.getenv('BOT_TOKEN', '7857906048:AAF7Mb6uSVHNadayyU0X_8so1fHz3kwUSqM')  # Replace in prod
+BOT_TOKEN = os.getenv('BOT_TOKEN', '7857906048:AAEDeeaKvLzyl6zNzhNd8Afe9lLrGF9Yw5s')  # Replace in prod
 DEFAULT_CHAT_ID = None
 SENDER_EMAIL = 'companytnn90@gmail.com'
 SENDER_PASSWORD = 'ncka udhb qryw jwnm'  # Update this securely
@@ -57,6 +57,9 @@ def receive_location():
         if DEFAULT_CHAT_ID:
             try:
                 asyncio.run(send_telegram_message(DEFAULT_CHAT_ID, message))
+                
+                # Now that location is selected, show the calendar
+                asyncio.run(show_calendar(DEFAULT_CHAT_ID))  # Trigger calendar display after receiving the location data
                 return jsonify({"message": "Data received and forwarded to bot"})
             except Exception as e:
                 logger.error(f"Error sending message to Telegram bot: {e}")
@@ -179,15 +182,18 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['email'] = user_email
     global DEFAULT_CHAT_ID
     DEFAULT_CHAT_ID = update.effective_chat.id
-
-    map_url = "https://compass-georgia.onrender.com/index"
-    keyboard = [[InlineKeyboardButton("🗺️ Open Map", url=map_url)]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
+    
+async def collect_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    map_url = "https://compass-georgia.onrender.com/index"  # Map interface URL
+    keyboard = [[InlineKeyboardButton("🗺️ Open Map", url=map_url)]]  # Map button
+    
     await update.message.reply_text(
-        "Thanks! Now please select your pickup and destination on the map:",
-        reply_markup=reply_markup
+        "Thanks! Now, please select your pickup and destination on the map:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
+    
+    # The calendar will be triggered only after the user selects a location
+    return LOCATION  # Return LOCATION state to wait for the location data.
 
     # Proceed to the next step (date selection)
     await update.message.reply_text(f"Great! Now, please choose your pickup date.")
