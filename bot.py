@@ -221,7 +221,7 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # After email, move to location step
     await collect_location(update, context)
-    return EMAIL
+    return LOCATION
 
 async def collect_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     map_url = "https://compass-georgia.onrender.com/index"  # Map interface URL
@@ -423,6 +423,9 @@ async def telegram_bot():
                 ],
                 EMAIL: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email),
+                ],
+                LOCATION: [
+
                 ],
                 DATE: [CallbackQueryHandler(select_date, pattern='^day_'),
                       CallbackQueryHandler(confirm_date, pattern="^confirm_date$"),
