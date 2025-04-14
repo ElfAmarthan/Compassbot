@@ -82,10 +82,7 @@ def format_location_message(data):
         f"💰 <b>Fare:</b> ${data['fare']:.2f}"
     )
 async def show_calendar_for_user(chat_id):
-    # Check if query exists; if not, send message directly to the user
     today = datetime.date.today()
-
-    # Set the default year and month for calendar
     month = today.month
     year = today.year
     month_name = calendar.month_name[month]
@@ -107,10 +104,13 @@ async def show_calendar_for_user(chat_id):
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Send the calendar to the user directly
     try:
         bot = Bot(BOT_TOKEN)
-        await bot.send_message(chat_id=chat_id, text=f"Please select a date for {month_name} {year}:", reply_markup=reply_markup)
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"📅 Please select a date for {month_name} {year}:",
+            reply_markup=reply_markup
+        )
     except Exception as e:
         logger.error(f"Error sending calendar to user: {e}")
 
@@ -454,7 +454,8 @@ async def telegram_bot():
                 NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name)],
                 EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
                 LOCATION: [CallbackQueryHandler(collect_location)],
-                DATE: [CallbackQueryHandler(select_date)],
+                DATE: [CallbackQueryHandler(select_date),
+                       CallbackQueryHandler(change_month, pattern='^(prev_month|next_month)$')],
                 TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time)],
             },
             fallbacks=[
@@ -468,6 +469,7 @@ async def telegram_bot():
         )
 
         application.add_handler(CallbackQueryHandler(change_month, pattern='^(prev_month|next_month)$'))
+        application.add_handler(CallbackQueryHandler(select_date, pattern='^day_\\d+$'))  # <-- Add this!
         application.add_handler(conv_handler)
 
         application.add_handler(conv_handler)
