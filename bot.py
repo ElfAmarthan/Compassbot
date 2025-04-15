@@ -214,6 +214,7 @@ async def run_bot():
 
     app.add_handler(conv_handler)
     app.add_handler(CallbackQueryHandler(handle_calendar, pattern='^(prev_month|next_month|day_\\d+)$'))
+    app.add_handler(MessageHandler(collect_time))
     await app.run_polling()
 
 if __name__ == "__main__":
