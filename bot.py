@@ -125,7 +125,7 @@ async def collect_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global DEFAULT_CHAT_ID
     context.user_data['email'] = update.message.text
-    context.user_data['chat_id'] = update.effective_chat.id
+    DEFAULT_CHAT_ID = update.effective_chat.id
 
     map_url = "https://compass-georgia.onrender.com/index"
     keyboard = [[InlineKeyboardButton("🗺 Open Map", url=map_url)]]
