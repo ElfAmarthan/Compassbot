@@ -40,8 +40,8 @@ def home():
 def show_map():
     return render_template('index.html')
 
-@app.route('/send-locations-to-user', methods=['POST'])
-def receive_location():
+@app.route('/send-locations-to-user', methods=['POST'], )
+def receive_location(context: ContextTypes.DEFAULT_TYPE):
     global DEFAULT_CHAT_ID
     try:
         data = request.json
@@ -49,6 +49,10 @@ def receive_location():
             return jsonify({"error": "Missing fields"}), 400
 
         if DEFAULT_CHAT_ID:
+            context.user_data['pickup'] = data['pickup']
+            context.user_data['destination'] = data['destination']
+            context.user_data['distance'] = data['distance']
+            context.user_data['fare'] = data['fare']
             loop = asyncio.get_event_loop()
             message = format_location_message(data)
             loop.run_until_complete(send_telegram_message(DEFAULT_CHAT_ID, message))
@@ -172,20 +176,32 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def collect_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     time_input = update.message.text.strip()
     try:
+        # Ensure the time format is correct
         datetime.datetime.strptime(time_input, "%H:%M")
         context.user_data['time'] = time_input
 
+        # Create a booking summary, including location-related data
         booking_summary = (
             f"✅ <b>Booking Summary:</b>\n\n"
             f"👤 Name: {context.user_data.get('name')}\n"
             f"📧 Email: {context.user_data.get('email')}\n"
             f"📅 Date: {context.user_data.get('date')}\n"
             f"⏰ Time: {context.user_data.get('time')}\n"
+            f"📍 Pickup: {context.user_data.get('pickup')['latitude']}, {context.user_data.get('pickup')['longitude']}\n"
+            f"🏁 Destination: {context.user_data.get('destination')['latitude']}, {context.user_data.get('destination')['longitude']}\n"
+            f"📏 Distance: {context.user_data.get('distance')}\n"
+            f"💰 Fare: {context.user_data.get('fare')}"
         )
 
+        # Send the booking summary to the user
+        await update.message.reply_text(f"✅ Your booking is confirmed!\n\n{booking_summary}", parse_mode=ParseMode.HTML)
+
+        # Send the booking summary to email recipients
         send_booking_email(booking_summary, [context.user_data['email'], DEFAULT_RECIPIENT_EMAIL])
-        await update.message.reply_text("✅ Booking confirmed! A confirmation email has been sent.")
+
+        # End the conversation
         return ConversationHandler.END
+
     except ValueError:
         await update.message.reply_text("❌ Invalid format. Please use HH:MM (e.g. 14:30).")
         return TIME
@@ -218,8 +234,6 @@ async def run_bot():
 
     app.add_handler(conv_handler)
     app.add_handler(CallbackQueryHandler(handle_calendar, pattern='^(prev_month|next_month|day_\\d+)$'))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time))
-    app.add_handler(CallbackQueryHandler(collect_time))
     await app.run_polling()
 
 if __name__ == "__main__":
