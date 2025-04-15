@@ -209,6 +209,8 @@ async def run_bot():
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name)],
             EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
             LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_location)],
+            DATE: [CallbackQueryHandler(handle_calendar, pattern='^(prev_month|next_month|day_\\d+)$')],
+            TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
