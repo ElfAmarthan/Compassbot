@@ -125,7 +125,7 @@ async def collect_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global DEFAULT_CHAT_ID
     context.user_data['email'] = update.message.text
-    DEFAULT_CHAT_ID = update.effective_chat.id
+    context.user_data['chat_id'] = update.effective_chat.id
 
     map_url = "https://compass-georgia.onrender.com/index"
     keyboard = [[InlineKeyboardButton("🗺 Open Map", url=map_url)]]
@@ -209,13 +209,13 @@ async def run_bot():
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name)],
             EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
             LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_location)],
-            DATE: [CallbackQueryHandler(handle_calendar, pattern='^(prev_month|next_month|day_\\d+)$')],
-            TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
 
     app.add_handler(conv_handler)
+    app.add_handler(CallbackQueryHandler(handle_calendar, pattern='^(prev_month|next_month|day_\\d+)$'))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time))
     await app.run_polling()
 
 if __name__ == "__main__":
