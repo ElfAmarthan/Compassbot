@@ -210,7 +210,8 @@ async def run_bot():
             EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
             LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_location)],
             DATE: [CallbackQueryHandler(handle_calendar, pattern='^(prev_month|next_month|day_\\d+)$')],
-            TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time)],
+            TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time),
+                   CallbackQueryHandler(collect_time)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
@@ -218,6 +219,7 @@ async def run_bot():
     app.add_handler(conv_handler)
     app.add_handler(CallbackQueryHandler(handle_calendar, pattern='^(prev_month|next_month|day_\\d+)$'))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time))
+    app.add_handler(CallbackQueryHandler(collect_time))
     await app.run_polling()
 
 if __name__ == "__main__":
