@@ -1,4 +1,3 @@
-# main.py
 import logging
 import smtplib
 import nest_asyncio
@@ -72,10 +71,10 @@ async def send_telegram_message(chat_id, text):
     bot = Bot(BOT_TOKEN)
     await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
 
-async def show_calendar_for_user(chat_id):
-    today = datetime.date.today()
-    month = today.month
-    year = today.year
+async def show_calendar_for_user(chat_id, year=None, month=None):
+    now = datetime.date.today()
+    year = year or now.year
+    month = month or now.month
     cal = calendar.monthcalendar(year, month)
     month_name = calendar.month_name[month]
 
@@ -110,9 +109,7 @@ def send_booking_email(booking, recipients):
 # --- Bot Logic ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    keyboard = [
-        [InlineKeyboardButton("Start Booking", callback_data='start_booking')]
-    ]
+    keyboard = [[InlineKeyboardButton("Start Booking", callback_data='start_booking')]]
     await update.message.reply_text("Welcome! Click below to start:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def book(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -135,67 +132,46 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Great! Select pickup & destination:", reply_markup=InlineKeyboardMarkup(keyboard))
     return LOCATION
 
+async def dummy_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    return LOCATION  # Hold in LOCATION state
+
 async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     data = query.data
     now = datetime.datetime.now()
 
-    if 'month' not in context.user_data:
-        context.user_data['month'] = now.month
-        context.user_data['year'] = now.year
+    month = context.user_data.get('month', now.month)
+    year = context.user_data.get('year', now.year)
 
     if data == 'prev_month':
-        context.user_data['month'] -= 1
-        if context.user_data['month'] < 1:
-            context.user_data['month'] = 12
-            context.user_data['year'] -= 1
+        month -= 1
+        if month < 1:
+            month = 12
+            year -= 1
     elif data == 'next_month':
-        context.user_data['month'] += 1
-        if context.user_data['month'] > 12:
-            context.user_data['month'] = 1
-            context.user_data['year'] += 1
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
     elif data.startswith("day_"):
         day = int(data.split("_")[1])
-        year = context.user_data['year']
-        month = context.user_data['month']
         selected_date = f"{year}-{month:02d}-{day:02d}"
         context.user_data['date'] = selected_date
         await query.edit_message_text(f"📅 Date selected: {selected_date}\nNow enter time (HH:MM):")
         return TIME
 
-    # Re-render calendar
-    month = context.user_data['month']
-    year = context.user_data['year']
-    cal = calendar.monthcalendar(year, month)
-    month_name = calendar.month_name[month]
-
-    keyboard = [
-        [InlineKeyboardButton(str(day), callback_data=f"day_{day}") for day in week if day != 0]
-        for week in cal
-    ]
-    keyboard.append([
-        InlineKeyboardButton("⬅️ Previous", callback_data="prev_month"),
-        InlineKeyboardButton("Next ➡️", callback_data="next_month")
-    ])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(f"📅 Select a date for {month_name} {year}:", reply_markup=reply_markup)
+    context.user_data['month'] = month
+    context.user_data['year'] = year
+    await show_calendar_for_user(query.message.chat.id, year, month)
     return DATE
-async def dummy_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return LOCATION  # Just stay in LOCATION until map input triggers next step
+
 async def collect_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     time_input = update.message.text.strip()
-    logger.info(f"User input time: {time_input}")
     try:
-        # Check if time format is correct (HH:MM)
         datetime.datetime.strptime(time_input, "%H:%M")
         context.user_data['time'] = time_input
 
-        # Log the collected time for debugging purposes
-        logger.info(f"Collected time: {time_input}")
-
-        # Format the booking summary
         booking_summary = (
             f"✅ <b>Booking Summary:</b>\n\n"
             f"👤 Name: {context.user_data.get('name')}\n"
@@ -204,30 +180,23 @@ async def collect_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⏰ Time: {context.user_data.get('time')}\n"
         )
 
-        # Send email with booking details
         send_booking_email(booking_summary, [context.user_data['email'], DEFAULT_RECIPIENT_EMAIL])
-
-        # Send confirmation message to the user
         await update.message.reply_text("✅ Booking confirmed! A confirmation email has been sent.")
-        
-        # End the conversation and return the correct state
         return ConversationHandler.END
     except ValueError:
-        # If the time format is invalid, prompt the user again
         await update.message.reply_text("❌ Invalid format. Please use HH:MM (e.g. 14:30).")
-        return TIME  # Stay in the TIME state for retry
+        return TIME
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Booking process has been cancelled.")
     return ConversationHandler.END
 
-
-# --- Start Flask in separate thread ---
+# --- Flask Thread ---
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, use_reloader=False, port=port, host="0.0.0.0")
 
-# --- Run Bot ---
+# --- Bot Runner ---
 async def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -236,15 +205,14 @@ async def run_bot():
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name)],
             EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
-            LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, dummy_handler)],  # Dummy, real one is from Flask
-            DATE: [CallbackQueryHandler(handle_calendar)],
+            LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, dummy_handler)],
+            DATE: [CallbackQueryHandler(handle_calendar, pattern='^(prev_month|next_month|day_\\d+)$')],
             TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time)],
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)],
     )
 
     app.add_handler(conv_handler)
-    app.add_handler(CallbackQueryHandler(handle_calendar, pattern='^(prev_month|next_month|day_\\d+)$'))
     await app.run_polling()
 
 if __name__ == "__main__":
