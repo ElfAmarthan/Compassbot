@@ -20,9 +20,9 @@ from telegram.ext import (
 # --- Constants ---
 NAME, EMAIL, LOCATION, DATE, TIME = range(5)
 BOT_TOKEN = os.getenv('BOT_TOKEN', 'your-real-token')
-SENDER_EMAIL = 'companytnn90@gmail.com'
-SENDER_PASSWORD = 'ncka udhb qryw jwnm'
-DEFAULT_RECIPIENT_EMAIL = 'companytnn90@gmail.com'
+SENDER_EMAIL = os.getenv('SENDER_EMAIL', 'companytnn90@gmail.com')
+SENDER_PASSWORD = os.getenv('SENDER_PASSWORD', 'your-email-password')
+DEFAULT_RECIPIENT_EMAIL = os.getenv('DEFAULT_RECIPIENT_EMAIL', 'companytnn90@gmail.com')
 DEFAULT_CHAT_ID = None
 
 # --- Logging ---
@@ -82,7 +82,7 @@ async def show_calendar_for_user(chat_id, year=None, month=None):
         [InlineKeyboardButton(str(day), callback_data=f"day_{day}") for day in week if day != 0]
         for week in cal
     ]
-    keyboard.append([
+    keyboard.append([ 
         InlineKeyboardButton("⬅️ Previous", callback_data="prev_month"),
         InlineKeyboardButton("Next ➡️", callback_data="next_month")
     ])
@@ -132,8 +132,11 @@ async def collect_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Great! Select pickup & destination:", reply_markup=InlineKeyboardMarkup(keyboard))
     return LOCATION
 
-async def dummy_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return LOCATION  # Hold in LOCATION state
+# New handler for location state
+async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # You can process the location data here or wait for the map interaction
+    await update.message.reply_text("Please interact with the map to select your location.")
+    return LOCATION
 
 async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -205,7 +208,7 @@ async def run_bot():
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_name)],
             EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_email)],
-            LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, dummy_handler)],
+            LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_location)],
             DATE: [CallbackQueryHandler(handle_calendar, pattern='^(prev_month|next_month|day_\\d+)$')],
             TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_time)],
         },
@@ -213,8 +216,6 @@ async def run_bot():
     )
 
     app.add_handler(conv_handler)
-    app.add_handler(CallbackQueryHandler(handle_calendar, pattern='^(prev_month|next_month|day_\\d+)$'))
-    app.add_handler(MessageHandler(collect_time))
     await app.run_polling()
 
 if __name__ == "__main__":
